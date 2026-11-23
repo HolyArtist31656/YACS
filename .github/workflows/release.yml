@@ -1,0 +1,24 @@
+name: Release Vendordep
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: vendordep
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '25'
+          cache: 'gradle'
+      - name: Publish Maven artifacts and generate vendordep JSON
+        env:
+          releaseVersion: ${{ github.ref_name }}
+        run: gradle clean build publish generateVendordepJson -PreleaseMode=true

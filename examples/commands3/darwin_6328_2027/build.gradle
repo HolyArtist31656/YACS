@@ -1,0 +1,45 @@
+plugins {
+    id "java"
+    id "application"
+    id "org.wpilib.GradleRIO" version "2027.0.0-alpha-7"
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
+}
+
+def ROBOT_MAIN_CLASS = "frc.robot.Main"
+
+wpi.java.runSimWithDebugJni = false
+
+
+repositories {
+    maven {
+        url = uri("../../../vendordep/build/maven/releases")
+    }
+}
+
+dependencies {
+    annotationProcessor wpi.java.deps.wpilibAnnotations()
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+
+    nativeDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.desktop)
+    nativeDebug wpi.java.vendor.jniDebug(wpi.platforms.desktop)
+    simulationDebug wpi.sim.enableDebug()
+
+    nativeRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
+    nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
+    simulationRelease wpi.sim.enableRelease()
+}
+
+wpi.sim.addGui().defaultEnabled = true
+wpi.sim.addDriverstation()
+
+application.mainClass = ROBOT_MAIN_CLASS
+wpi.java.configureApplication(application)
+
+tasks.named("run") {
+    jvmArgs "-Xmx256m", "-XX:+PrintCommandLineFlags"
+}

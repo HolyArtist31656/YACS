@@ -1,0 +1,46 @@
+plugins {
+    id 'java'
+    id 'idea'
+    id 'org.wpilib.WPILibRepositoriesPlugin' version '2027.0.0'
+    id 'org.wpilib.GradleVsCode' version '2027.0.0'
+    id 'org.wpilib.GradleRIO' version '2027.0.0-alpha-7'
+    id 'com.diffplug.spotless' version '8.0.0'
+}
+
+ext.wpilibVersion = "2027.0.0-alpha-7"
+ext.releasePath = "$buildDir/maven"
+ext.pubVersion = System.getenv("releaseVersion") ?: System.getenv("releaseName") ?: "2027.0.3-alpha1"
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "YASS"
+        url = "https://cdn.yassrobotics.com/"
+    }
+}
+
+wpilibRepositories.use2027Repos()
+if (project.hasProperty('releaseMode')) {
+    wpilibRepositories.addAllReleaseRepositories(project)
+} else {
+    wpilibRepositories.addAllDevelopmentRepositories(project)
+}
+
+wrapper {
+    gradleVersion = '9.4.1'
+}
+
+apply from: 'java.gradle'
+apply from: 'publish.gradle'
+
+spotless {
+    java {
+        target '../yacsim/java/**/*.java', 'src/test/java/**/*.java'
+        googleJavaFormat('1.28.0')
+        removeUnusedImports()
+        trimTrailingWhitespace()
+        endWithNewline()
+    }
+}
+
+build.dependsOn spotlessApply

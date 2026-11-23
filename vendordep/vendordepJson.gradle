@@ -1,0 +1,46 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
+def generateVendordepJson = tasks.register('generateVendordepJson') {
+    def templateFile = file('yacsim.json')
+    def outDir = layout.buildDirectory.dir('vendordeps')
+    inputs.file(templateFile)
+    outputs.dir(outDir)
+
+    doLast {
+        def dest = outDir.get().asFile
+        dest.mkdirs()
+
+        def raw = templateFile.text
+            .replace('${version}', pubVersion)
+            .replace('${uuid}', '9f6b4e1a-2c7d-4e8a-9b31-7a5c8d2027c3')
+            .replace('${groupId}', artifactGroupId)
+            .replace('${artifactId}', baseArtifactId)
+
+        def json = new JsonSlurper().parseText(raw)
+        json.fileName = 'yacsim_commands3.json'
+        json.name = 'Yet Another CAD Simulator (Commands v3)'
+        json.jsonUrl = 'https://cdn.yassrobotics.com/yacsim_commands3.json'
+        json.requires = [
+            [
+                uuid: '4decdc05-a056-46cf-9561-39449bbb0130',
+                errorMessage: 'YACSim requires WPILib Commands v3 (CommandsV3.json).',
+                offlineFileName: 'CommandsV3.json'
+            ],
+            [
+                uuid: 'a1051e86-a979-4880-a28b-a0d5362d1d97',
+                errorMessage: 'YACSim requires YAMS for Commands v3 (yams_commands3.json).',
+                offlineFileName: 'yams_commands3.json'
+            ]
+        ]
+        json.javaDependencies << [
+            groupId: artifactGroupId,
+            artifactId: "${baseArtifactId}-commands3",
+            version: pubVersion
+        ]
+        new File(dest, 'yacsim_commands3.json').text =
+            JsonOutput.prettyPrint(JsonOutput.toJson(json)) + '\n'
+    }
+}
+
+build.dependsOn generateVendordepJson

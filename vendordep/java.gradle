@@ -1,0 +1,72 @@
+var javaVersion = "25"
+
+def generateYacsimVersion = tasks.register('generateYacsimVersion') {
+    def outputDir = layout.buildDirectory.dir("generated/resources/yacsim")
+    outputs.dir(outputDir)
+    doLast {
+        def versionFile = outputDir.get().file("yacsim/core/yacsim-version.txt").asFile
+        versionFile.parentFile.mkdirs()
+        versionFile.text = "${project.ext.pubVersion}\n"
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "$rootDir/../yacsim/java/"
+        }
+        resources {
+            srcDir(generateYacsimVersion)
+        }
+    }
+    test {
+        java {
+            srcDir "src/test/java"
+        }
+    }
+}
+
+dependencies {
+    // Strictly matches dependencies already used by YAMS 2027 master (Commands v3 only)
+    implementation wpi.java.deps.wpilib()
+    implementation wpi.java.vendor.java()
+
+    implementation "org.wpilib.ntcore:ntcore-java:$wpilibVersion"
+    implementation "org.wpilib.wpilibj:wpilibj-java:$wpilibVersion"
+    implementation "org.wpilib.wpiutil:wpiutil-java:$wpilibVersion"
+    implementation "org.wpilib.wpimath:wpimath-java:$wpilibVersion"
+    implementation "org.wpilib.wpiunits:wpiunits-java:$wpilibVersion"
+    implementation "org.wpilib.datalog:datalog-java:$wpilibVersion"
+    implementation "org.wpilib.hal:hal-java:$wpilibVersion"
+
+    nativeDebug wpi.java.deps.wpilibJniDebug(wpi.platforms.desktop)
+    nativeDebug wpi.java.vendor.jniDebug(wpi.platforms.desktop)
+    simulationDebug wpi.sim.enableDebug()
+
+    nativeRelease wpi.java.deps.wpilibJniRelease(wpi.platforms.desktop)
+    nativeRelease wpi.java.vendor.jniRelease(wpi.platforms.desktop)
+    simulationRelease wpi.sim.enableRelease()
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter-api'
+    testImplementation 'org.junit.jupiter:junit-jupiter-params'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.mockito:mockito-core:5.3.1'
+    testImplementation 'org.mockito:mockito-junit-jupiter:5.3.1'
+}
+
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    maxHeapSize = '512m'
+    testLogging {
+        events "passed", "skipped", "failed"
+    }
+}
+
+tasks.withType(Javadoc).configureEach {
+    options.encoding = 'UTF-8'
+    options.overview = "$rootDir/../yacsim/java/overview.html"
+    options.links("https://docs.oracle.com/en/java/javase/$javaVersion/docs/api/")
+    options.addStringOption('Xdoclint:none', '-quiet')
+}

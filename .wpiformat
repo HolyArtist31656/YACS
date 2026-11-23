@@ -1,0 +1,10 @@
+cHeaderFileInclude {
+    \.h$
+    \.hpp$
+}
+javaFileInclude {
+    \.java$
+}
+licenseUpdateExclude {
+    gradle/
+}

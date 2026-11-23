@@ -1,0 +1,22 @@
+# Build & IDE outputs
+.gradle/
+build/
+bin/
+out/
+.idea/
+*.iml
+*.class
+.DS_Store
+*.log
+
+# WPILib Sim GUI & CTRE Phoenix 6 runtime artifacts
+logs/
+ctre_sim/
+*.hoot
+*.wpilog
+simgui*.json
+networktables.json*
+advantagescope-assets/
+
+# Downloaded 6328 Darwin CAD assets (fetched by setup_darwin_cad.ps1)
+examples/commands3/darwin_6328_2027/src/main/deploy/yacsim/models/darwin/

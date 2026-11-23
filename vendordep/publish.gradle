@@ -1,0 +1,45 @@
+apply plugin: 'maven-publish'
+
+ext.artifactGroupId = 'yacsim'
+ext.baseArtifactId = 'YACSim'
+def releasesRepoUrl = "$releasePath/releases"
+
+def variants = ['core', 'commands3']
+
+variants.each { variant ->
+    tasks.register("${variant}Jar", Jar) {
+        archiveBaseName.set("${baseArtifactId}-${variant}")
+        from(sourceSets.main.output) {
+            include "yacsim/${variant}/**"
+        }
+    }
+
+    tasks.register("${variant}SourcesJar", Jar) {
+        archiveBaseName.set("${baseArtifactId}-${variant}")
+        archiveClassifier.set('sources')
+        from(sourceSets.main.allSource) {
+            include "yacsim/${variant}/**"
+        }
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            url = uri(releasesRepoUrl)
+        }
+    }
+    publications {
+        variants.each { variant ->
+            create("yacsim_${variant}", MavenPublication) {
+                groupId = artifactGroupId
+                artifactId = "${baseArtifactId}-${variant}"
+                version = pubVersion
+                artifact tasks.named("${variant}Jar")
+                artifact tasks.named("${variant}SourcesJar")
+            }
+        }
+    }
+}
+
+apply from: 'vendordepJson.gradle'

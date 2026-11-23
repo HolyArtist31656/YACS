@@ -1,0 +1,20 @@
+{
+    "fileName": "yacsim.json",
+    "name": "Yet Another CAD Simulator",
+    "version": "${version}",
+    "wpilibYear": "2027_alpha7",
+    "uuid": "${uuid}",
+    "mavenUrls": [
+        "https://cdn.yassrobotics.com/"
+    ],
+    "jsonUrl": "https://cdn.yassrobotics.com/yacsim.json",
+    "javaDependencies": [
+        {
+            "groupId": "${groupId}",
+            "artifactId": "${artifactId}-core",
+            "version": "${version}"
+        }
+    ],
+    "jniDependencies": [],
+    "cppDependencies": []
+}
