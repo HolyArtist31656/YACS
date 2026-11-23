@@ -20,7 +20,8 @@ def generateVendordepJson = tasks.register('generateVendordepJson') {
         def json = new JsonSlurper().parseText(raw)
         json.fileName = 'yacsim_commands3.json'
         json.name = 'Yet Another CAD Simulator (Commands v3)'
-        json.jsonUrl = 'https://cdn.yassrobotics.com/yacsim_commands3.json'
+        json.mavenUrls = ['https://holyartist31656.github.io/YACS/maven/releases/']
+        json.jsonUrl = 'https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json'
         json.requires = [
             [
                 uuid: '4decdc05-a056-46cf-9561-39449bbb0130',

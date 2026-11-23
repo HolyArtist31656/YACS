@@ -1,24 +1,94 @@
-name: Release Vendordep
+name: Publish YACSim Vendordep (GitHub Pages)
 
 on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 2027.0.3-alpha1)'
+        required: false
+        default: '2027.0.3-alpha1'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: vendordep
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25 (Adoptium)
+        uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '25'
           cache: 'gradle'
-      - name: Publish Maven artifacts and generate vendordep JSON
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${GITHUB_REF_NAME#v}"
+          fi
+          echo "value=${VER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build, publish local Maven repo, and generate vendordep JSON
+        working-directory: vendordep
         env:
-          releaseVersion: ${{ github.ref_name }}
-        run: gradle clean build publish generateVendordepJson -PreleaseMode=true
+          releaseVersion: ${{ steps.version.outputs.value }}
+        run: |
+          chmod +x gradlew
+          ./gradlew clean build publish generateVendordepJson
+
+      - name: Assemble GitHub Pages site
+        run: |
+          mkdir -p _site/maven/releases _site/vendordeps
+          cp -r vendordep/build/maven/releases/* _site/maven/releases/
+          cp vendordep/build/vendordeps/yacsim_commands3.json _site/vendordeps/
+          cat << 'HTML' > _site/index.html
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>YACSim Vendordep Repository</title>
+            <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:3rem auto;padding:0 1rem;line-height:1.6}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:4px}</style>
+          </head>
+          <body>
+            <h1>YACSim (Yet Another CAD Simulator)</h1>
+            <p>Install in WPILib VS Code (2027 Commands v3) using the online vendordep URL:</p>
+            <p><code>https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json</code></p>
+            <p>Maven Repository: <code>https://holyartist31656.github.io/YACS/maven/releases/</code></p>
+          </body>
+          </html>
+          HTML
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

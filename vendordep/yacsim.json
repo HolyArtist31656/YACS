@@ -5,9 +5,9 @@
     "wpilibYear": "2027_alpha7",
     "uuid": "${uuid}",
     "mavenUrls": [
-        "https://cdn.yassrobotics.com/"
+        "https://holyartist31656.github.io/YACS/maven/releases/"
     ],
-    "jsonUrl": "https://cdn.yassrobotics.com/yacsim.json",
+    "jsonUrl": "https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json",
     "javaDependencies": [
         {
             "groupId": "${groupId}",
