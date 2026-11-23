@@ -44,32 +44,57 @@ jobs:
           fi
           echo "value=${VER}" >> "$GITHUB_OUTPUT"
 
-      - name: Build, publish local Maven repo, and generate vendordep JSON
+      - name: Build, publish local Maven repo, generate vendordep JSON, and build Javadoc
         working-directory: vendordep
         env:
           releaseVersion: ${{ steps.version.outputs.value }}
         run: |
           chmod +x gradlew
-          ./gradlew clean build publish generateVendordepJson
+          ./gradlew clean build publish generateVendordepJson javadoc
 
       - name: Assemble GitHub Pages site
         run: |
-          mkdir -p _site/maven/releases _site/vendordeps
+          mkdir -p _site/maven/releases _site/vendordeps _site/javadoc
           cp -r vendordep/build/maven/releases/* _site/maven/releases/
           cp vendordep/build/vendordeps/yacsim_commands3.json _site/vendordeps/
+          cp -r vendordep/build/docs/javadoc/* _site/javadoc/
           cat << 'HTML' > _site/index.html
           <!doctype html>
           <html lang="en">
           <head>
             <meta charset="utf-8">
-            <title>YACSim Vendordep Repository</title>
-            <style>body{font-family:system-ui,sans-serif;max-width:720px;margin:3rem auto;padding:0 1rem;line-height:1.6}code{background:#f3f4f6;padding:.2rem .4rem;border-radius:4px}</style>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>YACSim — Yet Another CAD Simulator</title>
+            <style>
+              body { font-family: system-ui, -apple-system, sans-serif; max-width: 780px; margin: 3rem auto; padding: 0 1.25rem; line-height: 1.6; color: #1f2937; }
+              h1 { margin-bottom: 0.25rem; }
+              .subtitle { color: #4b5563; margin-top: 0; }
+              code { background: #f3f4f6; padding: 0.2rem 0.45rem; border-radius: 4px; font-size: 0.92em; word-break: break-all; }
+              .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 1rem 1.25rem; margin: 1rem 0; background: #fafafa; }
+              ul { padding-left: 1.25rem; }
+              a { color: #2563eb; text-decoration: none; }
+              a:hover { text-decoration: underline; }
+            </style>
           </head>
           <body>
-            <h1>YACSim (Yet Another CAD Simulator)</h1>
-            <p>Install in WPILib VS Code (2027 Commands v3) using the online vendordep URL:</p>
-            <p><code>https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json</code></p>
-            <p>Maven Repository: <code>https://holyartist31656.github.io/YACS/maven/releases/</code></p>
+            <h1>YACSim — Yet Another CAD Simulator</h1>
+            <p class="subtitle">Lightweight WPILib 2027 (Java 25, Commands v3) 3D CAD simulation vendordep for YAMS and AdvantageScope.</p>
+
+            <div class="card">
+              <strong>Online Vendordep URL (WPILib 2027 VS Code):</strong><br>
+              <code>https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json</code>
+            </div>
+
+            <h2>Links</h2>
+            <ul>
+              <li><a href="javadoc/">Java API Documentation (Javadoc)</a></li>
+              <li><a href="vendordeps/yacsim_commands3.json">yacsim_commands3.json</a></li>
+              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/GETTING_STARTED.md">Getting Started Guide</a></li>
+              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/GUIDES.md">How-To Guides &amp; FRC 6328 Darwin Walkthrough</a></li>
+              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/API_REFERENCE.md">Markdown API Reference</a></li>
+              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/UNIT_TESTS.md">Unit Tests Reference</a></li>
+              <li><a href="https://github.com/HolyArtist31656/YACS">GitHub Repository</a></li>
+            </ul>
           </body>
           </html>
           HTML
