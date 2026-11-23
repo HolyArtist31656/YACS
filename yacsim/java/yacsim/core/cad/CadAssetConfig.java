@@ -9,9 +9,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Translation3d;
+import yacsim.core.physics.CadMassProperties;
 
 /**
  * Configuration for a single CAD mesh asset ({@code .glb}, {@code .gltf}, {@code .obj}, or {@code
@@ -39,6 +42,7 @@ public final class CadAssetConfig {
   private double unitScaleToMeters = 1.0;
   private double densityKgPerM3 = DEFAULT_ALUMINUM_DENSITY;
   private OptionalDouble massOverrideKg = OptionalDouble.empty();
+  private CadMassProperties massPropertiesOverride = null;
   private Translation3d zeroedPositionMeters = new Translation3d();
   private Rotation3d zeroedRotation = new Rotation3d();
   private final List<AxisRotation> orderedZeroedRotations = new ArrayList<>();
@@ -106,6 +110,18 @@ public final class CadAssetConfig {
   public CadAssetConfig withMassOverrideKg(double massKg) {
     if (massKg <= 0.0) throw new IllegalArgumentException("Mass override must be positive.");
     this.massOverrideKg = OptionalDouble.of(massKg);
+    return this;
+  }
+
+  /**
+   * Overrides bounding-box mass estimation with exact CAD-exported mass, center of mass, and
+   * principal inertia tensor ({@code Ixx}, {@code Iyy}, {@code Izz}).
+   *
+   * @param massProperties Exact {@link CadMassProperties} from CAD or a manifest.
+   * @return This config for chaining.
+   */
+  public CadAssetConfig withMassPropertiesOverride(CadMassProperties massProperties) {
+    this.massPropertiesOverride = Objects.requireNonNull(massProperties, "massProperties");
     return this;
   }
 
@@ -190,6 +206,11 @@ public final class CadAssetConfig {
   /** @return Explicit mass override in kilograms, if configured. */
   public OptionalDouble getMassOverrideKg() {
     return massOverrideKg;
+  }
+
+  /** @return Exact CAD mass/inertia override, if configured. */
+  public Optional<CadMassProperties> getMassPropertiesOverride() {
+    return Optional.ofNullable(massPropertiesOverride);
   }
 
   /** @return AdvantageScope zeroed position offset in meters. */

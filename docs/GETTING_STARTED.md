@@ -108,3 +108,15 @@ In WPILib `2027.0.0-alpha-7`, desktop simulation uses Gradle's `application` plu
 2. Connect AdvantageScope to `127.0.0.1` (NT4).
 3. Open a **3D Field** tab, drag `NT:/YACSim/RobotPose3d` onto **Poses → Robot**, select your `Robot_<Name>` model, and drag `NT:/YACSim/ComponentPoses` onto **Components**.
 4. Open a **Table** or **Line Graph** tab and add `NT:/YACSim/CollisionActive` and `NT:/YACSim/CollisionDetails` to monitor live OBB collisions.
+
+## Optional: Automated CAD Manifest / URDF Setup
+
+Instead of typing pivots, limits, wheel radii, and mass properties in Java, you can place a `yacsim-robot.json` manifest (or a standard `.urdf` file exported from Onshape, Fusion 360, or SolidWorks) in `src/main/deploy/yacsim/` and load it in one line:
+
+```java
+CadRobotConfig robotConfig = CadRobotConfig.fromManifest(
+    Filesystem.getDeployDirectory().toPath().resolve("yacsim/darwin/yacsim-robot.json"));
+YamsCommands3Bridge.bindFromManifest(robotConfig, "Hood", hood.getArm());
+```
+
+If you want to automatically fetch `yacsim-robot.json` and `.glb` meshes directly from Onshape, install **Python 3.10+** and link your Onshape API keys using the [Onshape Exporter Guide](ONSHAPE_EXPORTER_GUIDE.md) (Python is only needed for the exporter CLI, never for manual Java setup or robot runtime). See the [CAD Manifest & URDF Automation Guide](CAD_MANIFEST_GUIDE.md) and the [`darwin_6328_manifest_2027`](../examples/commands3/darwin_6328_manifest_2027/README.md) example for details.

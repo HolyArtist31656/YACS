@@ -4,27 +4,40 @@
 
 package yacsim.core.advantagescope;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.networktables.BooleanPublisher;
+import org.wpilib.networktables.DoublePublisher;
 import org.wpilib.networktables.NetworkTable;
 import org.wpilib.networktables.NetworkTableInstance;
 import org.wpilib.networktables.StringArrayPublisher;
 import org.wpilib.networktables.StructArrayPublisher;
 import org.wpilib.networktables.StructPublisher;
+import yacsim.core.model.CadRollerTelemetryConfig;
 import yacsim.core.physics.CollisionEvent;
 
 /**
- * Publishes YACSim robot poses, articulated component poses, and OBB collision telemetry to
- * NetworkTables 4 for live visualization in AdvantageScope.
+ * Publishes YACSim robot poses, articulated component poses, OBB collision telemetry, and spinning
+ * roller/flywheel telemetry to NetworkTables 4 for live visualization in AdvantageScope.
  */
 public final class AdvantageScopePublisher implements AutoCloseable {
+  private static final double SPINNING_THRESHOLD_RAD_PER_SEC = 0.5;
+
+  private record RollerPubs(
+      DoublePublisher rpmPub,
+      DoublePublisher surfaceSpeedPub,
+      BooleanPublisher spinningPub,
+      double radiusMeters) {}
+
   private final StructPublisher<Pose2d> robotPosePub;
   private final StructPublisher<Pose3d> robotPose3dPub;
   private final StructArrayPublisher<Pose3d> componentPosesPub;
   private final BooleanPublisher collisionActivePub;
   private final StringArrayPublisher collisionDetailsPub;
+  private final Map<String, RollerPubs> rollerPublishers = new LinkedHashMap<>();
 
   /**
    * Opens NetworkTables 4 struct, boolean, and string-array publishers under the given root table.
@@ -32,12 +45,37 @@ public final class AdvantageScopePublisher implements AutoCloseable {
    * @param rootTableName Root NetworkTables table name (for example {@code "YACSim"}).
    */
   public AdvantageScopePublisher(String rootTableName) {
+    this(rootTableName, List.of());
+  }
+
+  /**
+   * Opens NetworkTables 4 publishers under the given root table, plus per-roller telemetry topics
+   * under {@code /<rootTableName>/Rollers/<name>/}.
+   *
+   * @param rootTableName Root NetworkTables table name (for example {@code "YACSim"}).
+   * @param rollers Registered spinning roller/flywheel telemetry configurations.
+   */
+  public AdvantageScopePublisher(String rootTableName, List<CadRollerTelemetryConfig> rollers) {
     NetworkTable table = NetworkTableInstance.getDefault().getTable(rootTableName);
     this.robotPosePub = table.getStructTopic("RobotPose", Pose2d.struct).publish();
     this.robotPose3dPub = table.getStructTopic("RobotPose3d", Pose3d.struct).publish();
     this.componentPosesPub = table.getStructArrayTopic("ComponentPoses", Pose3d.struct).publish();
     this.collisionActivePub = table.getBooleanTopic("CollisionActive").publish();
     this.collisionDetailsPub = table.getStringArrayTopic("CollisionDetails").publish();
+
+    if (rollers != null && !rollers.isEmpty()) {
+      NetworkTable rollersTable = table.getSubTable("Rollers");
+      for (CadRollerTelemetryConfig roller : rollers) {
+        NetworkTable sub = rollersTable.getSubTable(roller.name());
+        rollerPublishers.put(
+            roller.name(),
+            new RollerPubs(
+                sub.getDoubleTopic("VelocityRPM").publish(),
+                sub.getDoubleTopic("SurfaceSpeedMPS").publish(),
+                sub.getBooleanTopic("Spinning").publish(),
+                roller.wheelRadiusMeters()));
+      }
+    }
   }
 
   /**
@@ -49,7 +87,29 @@ public final class AdvantageScopePublisher implements AutoCloseable {
    * @param collisions Active collision events for this frame.
    */
   public void publish(
-      Pose2d robotPose, Pose3d robotPose3d, Pose3d[] componentPoses, List<CollisionEvent> collisions) {
+      Pose2d robotPose,
+      Pose3d robotPose3d,
+      Pose3d[] componentPoses,
+      List<CollisionEvent> collisions) {
+    publish(robotPose, robotPose3d, componentPoses, collisions, Map.of());
+  }
+
+  /**
+   * Publishes a consistent simulation frame including spinning roller/flywheel velocities to
+   * NetworkTables.
+   *
+   * @param robotPose 2D robot field pose.
+   * @param robotPose3d 3D robot field pose including gyro pitch and roll.
+   * @param componentPoses Array of articulated component poses in registration order.
+   * @param collisions Active collision events for this frame.
+   * @param rollerRadPerSec Map from roller name to angular velocity in rad/s.
+   */
+  public void publish(
+      Pose2d robotPose,
+      Pose3d robotPose3d,
+      Pose3d[] componentPoses,
+      List<CollisionEvent> collisions,
+      Map<String, Double> rollerRadPerSec) {
     robotPosePub.set(robotPose);
     robotPose3dPub.set(robotPose3d);
     componentPosesPub.set(componentPoses);
@@ -57,9 +117,19 @@ public final class AdvantageScopePublisher implements AutoCloseable {
     String[] details = new String[collisions.size()];
     for (int i = 0; i < collisions.size(); i++) {
       CollisionEvent ev = collisions.get(i);
-      details[i] = String.format("%s <-> %s (%.4f m)", ev.componentA(), ev.componentB(), ev.penetrationDepthMeters());
+      details[i] =
+          String.format(
+              "%s <-> %s (%.4f m)", ev.componentA(), ev.componentB(), ev.penetrationDepthMeters());
     }
     collisionDetailsPub.set(details);
+
+    for (Map.Entry<String, RollerPubs> entry : rollerPublishers.entrySet()) {
+      double radPerSec = rollerRadPerSec.getOrDefault(entry.getKey(), 0.0);
+      RollerPubs pubs = entry.getValue();
+      pubs.rpmPub().set(radPerSec * 60.0 / (2.0 * Math.PI));
+      pubs.surfaceSpeedPub().set(radPerSec * pubs.radiusMeters());
+      pubs.spinningPub().set(Math.abs(radPerSec) > SPINNING_THRESHOLD_RAD_PER_SEC);
+    }
   }
 
   /** Closes all NetworkTables publishers owned by this instance. */
@@ -70,5 +140,11 @@ public final class AdvantageScopePublisher implements AutoCloseable {
     componentPosesPub.close();
     collisionActivePub.close();
     collisionDetailsPub.close();
+    for (RollerPubs pubs : rollerPublishers.values()) {
+      pubs.rpmPub().close();
+      pubs.surfaceSpeedPub().close();
+      pubs.spinningPub().close();
+    }
+    rollerPublishers.clear();
   }
 }

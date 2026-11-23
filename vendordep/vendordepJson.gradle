@@ -5,6 +5,7 @@ def generateVendordepJson = tasks.register('generateVendordepJson') {
     def templateFile = file('yacsim.json')
     def outDir = layout.buildDirectory.dir('vendordeps')
     inputs.file(templateFile)
+    inputs.property('pubVersion', pubVersion)
     outputs.dir(outDir)
 
     doLast {

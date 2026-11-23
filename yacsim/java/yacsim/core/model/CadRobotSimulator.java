@@ -15,7 +15,10 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
 import org.wpilib.math.geometry.Pose2d;
+import static org.wpilib.units.Units.RadiansPerSecond;
+
 import org.wpilib.math.geometry.Pose3d;
+import org.wpilib.units.measure.AngularVelocity;
 import yacsim.core.advantagescope.AdvantageScopeConfigGenerator;
 import yacsim.core.advantagescope.AdvantageScopePublisher;
 import yacsim.core.cad.MeshMetadata;
@@ -35,7 +38,8 @@ public final class CadRobotSimulator implements AutoCloseable {
       Pose2d robotPose2d,
       Pose3d robotPose3d,
       Pose3d[] componentPoses,
-      List<CollisionEvent> collisions) {}
+      List<CollisionEvent> collisions,
+      Map<String, Double> rollerRadPerSec) {}
 
   private final CadRobotConfig config;
   private final List<CadComponentConfig> allComponents;
@@ -78,7 +82,8 @@ public final class CadRobotSimulator implements AutoCloseable {
     for (int i = 0; i < initialPoses.length; i++) {
       initialPoses[i] = new Pose3d();
     }
-    this.latestSnapshot = new SimSnapshot(new Pose2d(), new Pose3d(), initialPoses, List.of());
+    this.latestSnapshot =
+        new SimSnapshot(new Pose2d(), new Pose3d(), initialPoses, List.of(), Map.of());
 
     if (config.isCollisionCheckingEnabled() && config.isIgnoreRestingOverlapsEnabled()) {
       calibrateRestingOverlaps();
@@ -96,7 +101,8 @@ public final class CadRobotSimulator implements AutoCloseable {
       }
     }
     if (enableNetworkTables) {
-      this.publisher = new AdvantageScopePublisher(config.getTelemetryTable());
+      this.publisher =
+          new AdvantageScopePublisher(config.getTelemetryTable(), config.getRollerTelemetries());
     }
   }
 
@@ -167,8 +173,18 @@ public final class CadRobotSimulator implements AutoCloseable {
     }
     List<CollisionEvent> collisions =
         config.isCollisionCheckingEnabled() ? evaluateCollisions(poses, true) : List.of();
+    Map<String, Double> rollerSpeeds = new LinkedHashMap<>();
+    for (CadRollerTelemetryConfig roller : config.getRollerTelemetries()) {
+      AngularVelocity v = roller.angularVelocitySupplier().get();
+      rollerSpeeds.put(roller.name(), v != null ? v.in(RadiansPerSecond) : 0.0);
+    }
     this.latestSnapshot =
-        new SimSnapshot(robotPose2d, robotPose3d, poses, List.copyOf(collisions));
+        new SimSnapshot(
+            robotPose2d,
+            robotPose3d,
+            poses,
+            List.copyOf(collisions),
+            Collections.unmodifiableMap(rollerSpeeds));
   }
 
   /** Publishes the latest immutable simulation snapshot to NetworkTables if enabled. */
@@ -176,7 +192,11 @@ public final class CadRobotSimulator implements AutoCloseable {
     if (publisher != null) {
       SimSnapshot snap = this.latestSnapshot;
       publisher.publish(
-          snap.robotPose2d(), snap.robotPose3d(), snap.componentPoses(), snap.collisions());
+          snap.robotPose2d(),
+          snap.robotPose3d(),
+          snap.componentPoses(),
+          snap.collisions(),
+          snap.rollerRadPerSec());
     }
   }
 
@@ -298,6 +318,17 @@ public final class CadRobotSimulator implements AutoCloseable {
    */
   public double getChassisGroundOffsetMeters() {
     return chassisGroundOffsetMeters;
+  }
+
+
+  /**
+   * Returns an unmodifiable map of the latest sampled angular velocities (in rad/s) for all
+   * rollers/flywheels registered via {@link CadRobotConfig#addRollerTelemetry}.
+   *
+   * @return Map from roller name to angular velocity in rad/s.
+   */
+  public Map<String, Double> getLatestRollerVelocitiesRadPerSec() {
+    return latestSnapshot.rollerRadPerSec();
   }
 
   /** @return Latest sampled 2D field pose. */

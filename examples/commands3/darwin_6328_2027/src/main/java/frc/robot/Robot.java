@@ -8,7 +8,10 @@ import static org.wpilib.units.Units.Meters;
 
 import frc.robot.mechanisms.CompactorMechanism;
 import frc.robot.mechanisms.DarwinCadSim;
+import frc.robot.mechanisms.FlywheelMechanism;
 import frc.robot.mechanisms.HoodMechanism;
+import frc.robot.mechanisms.HopperRollerMechanism;
+import frc.robot.mechanisms.KickerMechanism;
 import frc.robot.mechanisms.SlamtakeMechanism;
 import java.io.IOException;
 import org.wpilib.command3.Scheduler;
@@ -22,6 +25,9 @@ public class Robot extends TimedRobot {
   private final HoodMechanism hood = new HoodMechanism();
   private final SlamtakeMechanism slamtake = new SlamtakeMechanism();
   private final CompactorMechanism compactor = new CompactorMechanism();
+  private final FlywheelMechanism flywheel = new FlywheelMechanism();
+  private final KickerMechanism kicker = new KickerMechanism();
+  private final HopperRollerMechanism hopperRoller = new HopperRollerMechanism();
   private final DarwinCadSim darwinCadSim;
 
   private Notifier simNotifier;
@@ -30,9 +36,18 @@ public class Robot extends TimedRobot {
 
   public Robot() {
     try {
-      darwinCadSim = new DarwinCadSim(() -> simulatedFieldPose, hood, slamtake, compactor);
+      darwinCadSim =
+          new DarwinCadSim(
+              () -> simulatedFieldPose,
+              hood,
+              slamtake,
+              compactor,
+              flywheel,
+              kicker,
+              hopperRoller);
     } catch (IOException e) {
-      throw new RuntimeException("Failed to load Darwin CAD meshes. Run setup_darwin_cad.ps1 first.", e);
+      throw new RuntimeException(
+          "Failed to load Darwin CAD meshes. Run setup_darwin_cad.ps1 first.", e);
     }
   }
 
@@ -41,6 +56,9 @@ public class Robot extends TimedRobot {
     hood.periodic();
     slamtake.periodic();
     compactor.periodic();
+    flywheel.periodic();
+    kicker.periodic();
+    hopperRoller.periodic();
     darwinCadSim.periodic();
     scheduler.run();
   }
@@ -62,33 +80,52 @@ public class Robot extends TimedRobot {
     double dy = 2.0 * Math.cos(2.0 * t);
     simulatedFieldPose = new Pose2d(x, y, new Rotation2d(Math.atan2(dy, dx)));
 
-    // 12-second match cycle driving real YAMS PID + physics loops:
-    //   0-3s: Deploy Slamtake (intaking)
-    //   3-6s: Retract Slamtake + press Trash Compactor
-    //   6-9s: Raise Compactor + aim Launcher Hood up to 38 deg
-    //   9-12s: Return Hood to 10 deg stow
+    // 12-second match cycle driving all YAMS positional + velocity/roller physics loops:
+    //   0-3s: Deploy Slamtake & run IntakeRoller (13 V) + conservative HopperRoller (3 V)
+    //   3-6s: Retract Slamtake, press Compactor, spin up Launcher Flywheel (175 rad/s)
+    //   6-9s: Aim Hood (38 deg), Launch with Flywheel (175 rad/s), Kickers (6 m/s), Hopper (12 V)
+    //   9-12s: Stow Hood (10 deg), return Flywheel to idle (80 rad/s), stop rollers
     double phase = simTimeSeconds % 12.0;
     if (phase < 3.0) {
       slamtake.setTargetAngle(Degrees.of(22.0));
+      slamtake.setRollerVoltage(SlamtakeMechanism.ROLLER_INTAKE_VOLTS);
       compactor.setTargetHeight(CompactorMechanism.DEFAULT_HEIGHT);
       hood.setTargetAngle(HoodMechanism.MIN_ANGLE);
+      flywheel.setTargetVelocity(FlywheelMechanism.IDLE_SPEED);
+      kicker.setTargetSurfaceSpeedMps(0.0);
+      hopperRoller.setVoltage(HopperRollerMechanism.CONSERVATIVE_LAUNCH_VOLTS);
     } else if (phase < 6.0) {
       slamtake.setTargetAngle(Degrees.of(135.0));
+      slamtake.setRollerVoltage(0.0);
       compactor.setTargetHeight(CompactorMechanism.COMPACT_HEIGHT);
       hood.setTargetAngle(Degrees.of(18.0));
+      flywheel.setTargetVelocity(FlywheelMechanism.LAUNCH_SPEED);
+      kicker.setTargetSurfaceSpeedMps(0.0);
+      hopperRoller.setVoltage(HopperRollerMechanism.CONSERVATIVE_LAUNCH_VOLTS);
     } else if (phase < 9.0) {
       slamtake.setTargetAngle(Degrees.of(140.0));
+      slamtake.setRollerVoltage(0.0);
       compactor.setTargetHeight(Meters.of(0.58));
       hood.setTargetAngle(Degrees.of(38.0));
+      flywheel.setTargetVelocity(FlywheelMechanism.LAUNCH_SPEED);
+      kicker.setTargetSurfaceSpeedMps(KickerMechanism.LAUNCH_SURFACE_SPEED_MPS);
+      hopperRoller.setVoltage(HopperRollerMechanism.LAUNCH_VOLTS);
     } else {
       slamtake.setTargetAngle(Degrees.of(140.0));
+      slamtake.setRollerVoltage(0.0);
       compactor.setTargetHeight(CompactorMechanism.DEFAULT_HEIGHT);
       hood.setTargetAngle(HoodMechanism.MIN_ANGLE);
+      flywheel.setTargetVelocity(FlywheelMechanism.IDLE_SPEED);
+      kicker.setTargetSurfaceSpeedMps(0.0);
+      hopperRoller.setVoltage(0.0);
     }
 
     hood.simulationPeriodic();
     slamtake.simulationPeriodic();
     compactor.simulationPeriodic();
+    flywheel.simulationPeriodic();
+    kicker.simulationPeriodic();
+    hopperRoller.simulationPeriodic();
     darwinCadSim.simulationPeriodic();
   }
 }

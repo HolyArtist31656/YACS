@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.concurrent.ConcurrentHashMap;
 import org.wpilib.math.geometry.Translation3d;
@@ -40,6 +41,7 @@ public final class MeshParser {
       double unitScale,
       double densityKgPerM3,
       OptionalDouble massOverrideKg,
+      Optional<CadMassProperties> massPropertiesOverride,
       int maxTriangleBudget) {}
 
   private static final Map<CacheKey, MeshMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
@@ -74,6 +76,7 @@ public final class MeshParser {
             config.getUnitScaleToMeters(),
             config.getDensityKgPerM3(),
             config.getMassOverrideKg(),
+            config.getMassPropertiesOverride(),
             config.getMaxTriangleBudget());
     MeshMetadata cached = METADATA_CACHE.get(cacheKey);
     if (cached != null) {
@@ -103,7 +106,8 @@ public final class MeshParser {
       }
     }
 
-    CadMassProperties massProps = raw.massProperties();
+    CadMassProperties massProps =
+        config.getMassPropertiesOverride().orElseGet(raw::massProperties);
     if (config.getMassOverrideKg().isPresent()) {
       massProps = massProps.withTotalMassKg(config.getMassOverrideKg().getAsDouble());
     }

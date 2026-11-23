@@ -35,6 +35,9 @@ Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pos
 | `static List<Supplier<Pose3d>> fromCascadingElevator(Elevator elevator, int stageCount, Translation3d base, MotionAxis axis)` | Builds proportional per-stage `Pose3d` suppliers (`1/N .. N/N`). |
 | `static Supplier<Pose3d> fromFourBar(Arm arm, Translation3d pivot, double armLengthMeters, MotionAxis axis [, boolean inverted])` | Keeps a 4-bar end-effector level while following the arm's circular arc. |
 | `static CadDrivetrainConfig fromYamsSwerve(SwerveDrive drive, ...)` | Binds `drive::getPose`, `drive::getGyroRotation3d`, and `drive::getModulePositions` directly. |
+| `static Supplier<Pose3d> fromYamsFlyWheel(FlyWheel flywheel, Transform3d mountOffset)` | Wraps YAMS `FlyWheel.getPose3d()` with a CAD mounting offset. |
+| `static Supplier<Pose3d> fromYamsRollerMotor(SmartMotorController motor, Translation3d axle, MotionAxis axis [, boolean inverted])` | Spins a roller/wheel `.glb` directly from `motor.getMechanismPosition()`. |
+| `static Supplier<Pose3d> fromMountedYamsRoller(Supplier<Pose3d> parentPose, SmartMotorController motor, Translation3d localAxle, MotionAxis axis, boolean inverted)` | Mounts a spinning roller bar onto a moving parent mechanism. |
 
 ### `CadCollisionTriggers`
 Factory methods returning WPILib Commands v3 `Trigger` instances.
@@ -58,6 +61,7 @@ Fluent builder defining a simulated robot's chassis, articulated components, col
 | `static CadRobotConfig fromAdvantageScopeDir(Path robotAssetDir)` | Imports an existing AdvantageScope `Robot_<Name>` directory (`config.json`, `model*.glb`, rotations, positions, cameras). |
 | `withComponentPoseSupplier(int index [, String newName], Supplier<Pose3d>)` | Binds (and optionally renames) a component loaded via `fromAdvantageScopeDir`. |
 | `addCamera(CadCameraConfig)` / `addCamera(name, Transform3d, fovDeg, w, h)` | Registers a 3D vision camera frustum for AdvantageScope `config.json`. |
+| `addRollerTelemetry(CadRollerTelemetryConfig)` / `addRollerTelemetry(name, Supplier<AngularVelocity>, radiusMeters)` | Publishes live `VelocityRPM`, `SurfaceSpeedMPS`, and `Spinning` under `/<tableName>/Rollers/<name>/`. |
 | `withDrivetrain(CadDrivetrainConfig cfg)` | Registers chassis asset, field pose supplier, and all swerve/wheel components. |
 | `withChassisAsset(CadAssetConfig asset)` | Sets chassis CAD asset directly (when not using `CadDrivetrainConfig`). |
 | `addComponent(CadComponentConfig comp)` | Adds an articulated mechanism component in AdvantageScope `model_N` order. |
@@ -96,6 +100,7 @@ Core thread-safe simulation engine (`implements AutoCloseable`). Uses a lock-fre
 | `Optional<BoundingBox3d> getResolvedExtensionEnvelope()` | Returns the active extension envelope (explicit or auto-derived from chassis bounds). |
 | `Set<String> getAutoIgnoredRestingPairs()` | Returns unmodifiable set of `"A <-> B"` labels auto-ignored at startup when `ignoreRestingOverlaps()` is enabled. |
 | `double getChassisGroundOffsetMeters()` | Returns `-chassisMinZ` when `autoGroundChassis()` is enabled, or `0.0` otherwise. |
+| `Map<String, Double> getLatestRollerVelocitiesRadPerSec()` | Returns latest sampled angular velocities (rad/s) for all registered rollers/flywheels. |
 | `Pose2d getLatestRobotPose2d()` / `Pose3d getLatestRobotPose3d()` | Latest robot field pose. |
 | `Pose3d[] getLatestComponentPoses()` | Defensive copy of latest component poses in registration order. |
 | `List<CollisionEvent> getLatestCollisions()` | Immutable list of active collisions. |
@@ -134,7 +139,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 - **`CadSwerveModuleConfig`**: Configures a swerve module's mounting `Translation3d`, wheel radius, steer fork asset, wheel asset, and `Supplier<SwerveModulePosition>`.
 - **`YamsDrivetrainBridge.fromYamsSwerve(...)`**: One-call factory wiring a 4-module YAMS swerve drivetrain into `CadDrivetrainConfig`.
 - **`MotionAxis`**: Enum (`X`, `Y`, `Z`) with `toRotation3d(double radians)` and `toTranslation3d(double meters)`.
-- **`YamsMechanismBridge`**: `fromPoseSupplier`, `chainParentChild`, `fromAngleSupplier(Supplier<Angle>, ...)`, `fromDistanceSupplier(Supplier<Distance>, ...)`, `estimateMass(MeshMetadata)`, `estimateArmMoi(MeshMetadata, Translation3d, MotionAxis)`, and `estimateArmMoiKgM2(...)`.
+- **`YamsMechanismBridge`**: `fromPoseSupplier`, `chainParentChild`, `fromAngleSupplier`, `fromDistanceSupplier`, `fromCascadingElevator`, `fromFourBar`, `fromSpinningWheel`, `fromAngularVelocity`, `fromMountedRoller`, `estimateMass`, `estimateArmMoi`, and `estimateArmMoiKgM2`.
 
 ---
 
@@ -153,3 +158,29 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 - **`CadCameraConfig`**: Immutable camera frustum record `(name, robotToCamera, fovDegrees, resolutionWidthPx, resolutionHeightPx)`.
 - **`AdvantageScopePublisher`**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, and `CollisionDetails` under the configured NetworkTables root table (default `/YACSim`).
 - **`MinimalJson`**: Zero-dependency recursive-descent JSON parser (`parse(String)`) and pretty-printer (`toPrettyJson(Object)`).
+
+---
+
+## `yacsim.core.manifest` (Phase 1 CAD Automation)
+
+| Class / Method | Purpose |
+| :--- | :--- |
+| `CadJointType` | Enum: `FIXED`, `REVOLUTE`, `PRISMATIC`, `CONTINUOUS` + `fromString(String)`. |
+| `CadLinkManifest` | Record holding link name, relative `meshFile`, `unitScaleToMeters`, `zeroedPositionMeters`, `zeroedRotations`, optional exact `CadMassProperties`, `collisionEnabled`, and `toCadAssetConfig(Path)`. |
+| `CadJointManifest` | Record holding joint `type`, `parentLink`, `childLink`, `originMeters`, `originRotation`, `zeroOffset`, `axis`, `inverted`, hard/soft limits, `startingPosition`, `lengthMeters`, `wheelRadiusMeters`, `momentOfInertiaKgM2`, plus WPILib Units helpers (`minLimitAngle()`, `maxLimitAngle()`, `softMinLimitAngle()`, `softMaxLimitAngle()`, `startingAngle()`, `minLimitDistance()`, `maxLimitDistance()`, `softMinLimitDistance()`, `softMaxLimitDistance()`, `startingDistance()`, `length()`, `wheelRadius()`, `wheelDiameter()`, `momentOfInertia()`). |
+| `CadRobotManifest` | Top-level manifest record (`schemaVersion`, `robotName`, `sourceUrl`, extension margins, flags, `chassis`, `links`, `joints`, `cameras`) with `findLink`/`getLink`, `findJoint`/`getJoint`, `getLinkMass(String)`, and `getJointMomentOfInertia(String)`. |
+| `CadManifestLoader` | Zero-dependency JSON & XXE-hardened URDF XML loader/serializer: `loadJson(Path)`, `parseJson(String)`, `loadUrdf(Path)`, `toPrettyJson(CadRobotManifest)`, `writeJson(CadRobotManifest, Path)`. |
+
+### Manifest & Exact-Mass Extensions on Existing Classes
+
+| Method | Class | Purpose |
+| :--- | :--- | :--- |
+| `withMassPropertiesOverride(CadMassProperties)` | `CadAssetConfig` | Overrides bounding-box mass estimation in `MeshParser` with exact CAD mass, CoM, and principal inertia tensor (`Ixx`/`Iyy`/`Izz`). |
+| `fromManifest(Path)` / `fromManifest(CadRobotManifest, Path)` | `CadRobotConfig` | Populates chassis, links, exact mass properties, cameras, extension margins, and flags from `yacsim-robot.json`. |
+| `fromUrdf(Path)` | `CadRobotConfig` | Imports a standard `.urdf` XML file directly into a `CadRobotConfig` with attached `CadRobotManifest`. |
+| `getManifest()` | `CadRobotConfig` | Returns `Optional<CadRobotManifest>` when created from a manifest or URDF. |
+| `withComponentPoseSupplier(String, Supplier<Pose3d>)` | `CadRobotConfig` | Binds a live pose supplier by link/component name instead of 0-based index. |
+| `bindFromManifest(CadRobotConfig, String, Arm\|Elevator\|Pivot\|SmartMotorController)` | `YamsCommands3Bridge` | Binds YAMS 2027 mechanisms and rollers directly from manifest joint origins, axes, inversions, and wheel radii. |
+| `poseSupplierFromManifest(CadRobotManifest, String, Arm\|Elevator\|Pivot)` | `YamsCommands3Bridge` | Returns the manifest-derived `Supplier<Pose3d>` for composition or custom inspection. |
+
+| `getComponentPoseSupplier(String)` | `CadRobotConfig` | Returns `Optional<Supplier<Pose3d>>` for automatic parent-mounted roller chaining in `YamsCommands3Bridge.bindFromManifest`. |

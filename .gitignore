@@ -20,3 +20,8 @@ advantagescope-assets/
 
 # Downloaded 6328 Darwin CAD assets (fetched by setup_darwin_cad.ps1)
 examples/commands3/darwin_6328_2027/src/main/deploy/yacsim/models/darwin/
+__pycache__/
+*.pyc
+examples/**/darwin_onshape/
+examples/**/src/main/deploy/yacsim/**/model.glb
+examples/**/src/main/deploy/yacsim/**/model_[0-3].glb

@@ -1,0 +1,434 @@
+{
+    "schemaVersion":  "1.0",
+    "robotName":  "DarwinManifest",
+    "sourceUrl":  "https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264",
+    "extensionXyMarginMeters":  0.35,
+    "extensionMaxHeightMeters":  1.85,
+    "ignoreRestingOverlaps":  true,
+    "autoGroundChassis":  false,
+    "disableAdvantageScopeSimplification":  false,
+    "chassis":  {
+                    "name":  "Chassis",
+                    "meshFile":  "model.glb",
+                    "zeroedPosition":  [
+                                           0.0,
+                                           0.0,
+                                           0.0
+                                       ],
+                    "zeroedRotations":  [
+                                            {
+                                                "axis":  "x",
+                                                "degrees":  90
+                                            },
+                                            {
+                                                "axis":  "z",
+                                                "degrees":  90
+                                            }
+                                        ],
+                    "massProperties":  {
+                                           "volumeCubicMeters":  0.022,
+                                           "massKilograms":  52.0,
+                                           "centerOfMassMeters":  [
+                                                                      0.0,
+                                                                      0.0,
+                                                                      0.22
+                                                                  ],
+                                           "ixxKgM2":  3.5,
+                                           "iyyKgM2":  4.2,
+                                           "izzKgM2":  5.8
+                                       },
+                    "collisionEnabled":  true
+                },
+    "links":  [
+                  {
+                      "name":  "Hood",
+                      "meshFile":  "model_0.glb",
+                      "zeroedPosition":  [
+                                             0.175,
+                                             0,
+                                             -0.525
+                                         ],
+                      "zeroedRotations":  [
+                                              {
+                                                  "axis":  "x",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "z",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "y",
+                                                  "degrees":  10
+                                              }
+                                          ],
+                      "massProperties":  {
+                                             "volumeCubicMeters":  0.0005,
+                                             "massKilograms":  1.360777,
+                                             "centerOfMassMeters":  [
+                                                                        0.0,
+                                                                        0.0,
+                                                                        0.09
+                                                                    ],
+                                             "ixxKgM2":  0.014,
+                                             "iyyKgM2":  0.014696,
+                                             "izzKgM2":  0.012
+                                         },
+                      "collisionEnabled":  true
+                  },
+                  {
+                      "name":  "Slamtake",
+                      "meshFile":  "model_1.glb",
+                      "zeroedPosition":  [
+                                             0.167,
+                                             0,
+                                             0.327
+                                         ],
+                      "zeroedRotations":  [
+                                              {
+                                                  "axis":  "x",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "z",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "y",
+                                                  "degrees":  147.5
+                                              }
+                                          ],
+                      "massProperties":  {
+                                             "volumeCubicMeters":  0.0014,
+                                             "massKilograms":  3.628739,
+                                             "centerOfMassMeters":  [
+                                                                        0.16,
+                                                                        0.0,
+                                                                        0.0
+                                                                    ],
+                                             "ixxKgM2":  0.08,
+                                             "iyyKgM2":  0.123861,
+                                             "izzKgM2":  0.11
+                                         },
+                      "collisionEnabled":  true
+                  },
+                  {
+                      "name":  "FrontHopper",
+                      "meshFile":  "model_2.glb",
+                      "zeroedPosition":  [
+                                             -0.35,
+                                             0,
+                                             -0.37
+                                         ],
+                      "zeroedRotations":  [
+                                              {
+                                                  "axis":  "x",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "z",
+                                                  "degrees":  90
+                                              }
+                                          ],
+                      "massProperties":  {
+                                             "volumeCubicMeters":  0.0009,
+                                             "massKilograms":  2.2,
+                                             "centerOfMassMeters":  [
+                                                                        0.0,
+                                                                        0.0,
+                                                                        0.0
+                                                                    ],
+                                             "ixxKgM2":  0.04,
+                                             "iyyKgM2":  0.05,
+                                             "izzKgM2":  0.05
+                                         },
+                      "collisionEnabled":  true
+                  },
+                  {
+                      "name":  "TrashCompactor",
+                      "meshFile":  "model_3.glb",
+                      "zeroedPosition":  [
+                                             -0.01,
+                                             0,
+                                             -0.555
+                                         ],
+                      "zeroedRotations":  [
+                                              {
+                                                  "axis":  "x",
+                                                  "degrees":  90
+                                              },
+                                              {
+                                                  "axis":  "z",
+                                                  "degrees":  90
+                                              }
+                                          ],
+                      "massProperties":  {
+                                             "volumeCubicMeters":  0.001,
+                                             "massKilograms":  2.721554,
+                                             "centerOfMassMeters":  [
+                                                                        0.0,
+                                                                        0.0,
+                                                                        0.0
+                                                                    ],
+                                             "ixxKgM2":  0.04,
+                                             "iyyKgM2":  0.04,
+                                             "izzKgM2":  0.06
+                                         },
+                      "collisionEnabled":  true
+                  },
+                  {
+                      "name":  "FlywheelMesh",
+                      "meshFile":  "model_4.glb",
+                      "zeroedPosition":  [
+                                             0.0,
+                                             0.0,
+                                             0.0
+                                         ],
+                      "zeroedRotations":  [
+
+                                          ],
+                      "collisionEnabled":  false
+                  },
+                  {
+                      "name":  "KickerFrontMesh",
+                      "meshFile":  "model_5.glb",
+                      "zeroedPosition":  [
+                                             0.0,
+                                             0.0,
+                                             0.0
+                                         ],
+                      "zeroedRotations":  [
+
+                                          ],
+                      "collisionEnabled":  false
+                  },
+                  {
+                      "name":  "KickerBackMesh",
+                      "meshFile":  "model_6.glb",
+                      "zeroedPosition":  [
+                                             0.0,
+                                             0.0,
+                                             0.0
+                                         ],
+                      "zeroedRotations":  [
+
+                                          ],
+                      "collisionEnabled":  false
+                  },
+                  {
+                      "name":  "HopperRollerMesh",
+                      "meshFile":  "model_7.glb",
+                      "zeroedPosition":  [
+                                             0.0,
+                                             0.0,
+                                             0.0
+                                         ],
+                      "zeroedRotations":  [
+
+                                          ],
+                      "collisionEnabled":  false
+                  },
+                  {
+                      "name":  "IntakeRollerMesh",
+                      "meshFile":  "model_8.glb",
+                      "zeroedPosition":  [
+                                             0.0,
+                                             0.0,
+                                             0.0
+                                         ],
+                      "zeroedRotations":  [
+
+                                          ],
+                      "collisionEnabled":  false
+                  }
+              ],
+    "joints":  [
+                   {
+                       "name":  "Hood",
+                       "type":  "revolute",
+                       "parentLink":  "Chassis",
+                       "childLink":  "Hood",
+                       "originMeters":  [
+                                            -0.273,
+                                            0.0,
+                                            0.486
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "inverted":  true,
+                       "minLimit":  0.15707963,
+                       "maxLimit":  0.73303829,
+                       "softMinLimit":  0.17453293,
+                       "softMaxLimit":  0.71907565,
+                       "startingPosition":  0.17453293,
+                       "lengthMeters":  0.18
+                   },
+                   {
+                       "name":  "Slamtake",
+                       "type":  "revolute",
+                       "parentLink":  "Chassis",
+                       "childLink":  "Slamtake",
+                       "originMeters":  [
+                                            0.316992,
+                                            0.0,
+                                            0.186
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "inverted":  true,
+                       "minLimit":  0.26179939,
+                       "maxLimit":  2.58308729,
+                       "softMinLimit":  0.30384197,
+                       "softMaxLimit":  2.54498792,
+                       "startingPosition":  2.44346095,
+                       "lengthMeters":  0.32
+                   },
+                   {
+                       "name":  "TrashCompactor",
+                       "type":  "prismatic",
+                       "parentLink":  "Chassis",
+                       "childLink":  "TrashCompactor",
+                       "originMeters":  [
+                                            0.01,
+                                            0.0,
+                                            0.0
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Z",
+                       "inverted":  false,
+                       "minLimit":  0.3,
+                       "maxLimit":  0.65,
+                       "softMinLimit":  0.32,
+                       "softMaxLimit":  0.62,
+                       "startingPosition":  0.554692,
+                       "wheelRadiusMeters":  0.0254
+                   },
+                   {
+                       "name":  "Flywheel",
+                       "type":  "continuous",
+                       "parentLink":  "Chassis",
+                       "childLink":  "FlywheelMesh",
+                       "originMeters":  [
+                                            -0.151,
+                                            0.0,
+                                            0.486
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "wheelRadiusMeters":  0.0508,
+                       "momentOfInertiaKgM2":  0.02
+                   },
+                   {
+                       "name":  "KickerFront",
+                       "type":  "continuous",
+                       "parentLink":  "Chassis",
+                       "childLink":  "KickerFrontMesh",
+                       "originMeters":  [
+                                            -0.08,
+                                            0.0,
+                                            0.38
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "wheelRadiusMeters":  0.03175,
+                       "momentOfInertiaKgM2":  0.005
+                   },
+                   {
+                       "name":  "KickerBack",
+                       "type":  "continuous",
+                       "parentLink":  "Chassis",
+                       "childLink":  "KickerBackMesh",
+                       "originMeters":  [
+                                            -0.16,
+                                            0.0,
+                                            0.36
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "wheelRadiusMeters":  0.020066,
+                       "momentOfInertiaKgM2":  0.005
+                   },
+                   {
+                       "name":  "HopperRoller",
+                       "type":  "continuous",
+                       "parentLink":  "Chassis",
+                       "childLink":  "HopperRollerMesh",
+                       "originMeters":  [
+                                            0.05,
+                                            0.0,
+                                            0.25
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "wheelRadiusMeters":  0.0254,
+                       "momentOfInertiaKgM2":  0.005
+                   },
+                   {
+                       "name":  "IntakeRoller",
+                       "type":  "continuous",
+                       "parentLink":  "Slamtake",
+                       "childLink":  "IntakeRollerMesh",
+                       "originMeters":  [
+                                            0.32,
+                                            0.0,
+                                            0.0
+                                        ],
+                       "originRpyRadians":  [
+                                                0.0,
+                                                0.0,
+                                                0.0
+                                            ],
+                       "axis":  "Y",
+                       "wheelRadiusMeters":  0.0254,
+                       "momentOfInertiaKgM2":  0.005
+                   }
+               ],
+    "cameras":  [
+                    {
+                        "name":  "FrontCamera",
+                        "position":  [
+                                         0.28,
+                                         0.0,
+                                         0.52
+                                     ],
+                        "rpyRadians":  [
+                                           0.0,
+                                           -0.261799,
+                                           0.0
+                                       ],
+                        "fovDegrees":  70.0,
+                        "resolution":  [
+                                           1280,
+                                           800
+                                       ]
+                    }
+                ]
+}

@@ -8,8 +8,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose3d;
+import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
+import yacsim.core.manifest.CadJointManifest;
+import yacsim.core.manifest.CadRobotManifest;
+import yacsim.core.model.CadRobotConfig;
 import yacsim.core.yams.MotionAxis;
 import yacsim.core.yams.YamsMechanismBridge;
 import yams.commands3.mechanisms.Arm;
@@ -17,7 +21,9 @@ import yams.commands3.mechanisms.Elevator;
 import yacsim.core.cad.CadAssetConfig;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.drivetrain.YamsDrivetrainBridge;
+import yams.commands3.mechanisms.FlyWheel;
 import yams.commands3.mechanisms.Pivot;
+import yams.core.motorcontrollers.SmartMotorController;
 import yams.commands3.swerve.SwerveDrive;
 
 /**
@@ -272,5 +278,296 @@ public final class YamsCommands3Bridge {
         drive::getPose,
         drive::getGyroRotation3d,
         drive::getModulePositions);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS Commands v3 {@link FlyWheel}'s native
+   * {@code getPose3d()} with an optional fixed CAD mount offset.
+   *
+   * @param flywheel YAMS {@link FlyWheel} instance.
+   * @param cadMountOffset Fixed transform from flywheel origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsFlyWheel(FlyWheel flywheel, Transform3d cadMountOffset) {
+    Objects.requireNonNull(flywheel, "flywheel");
+    return YamsMechanismBridge.fromPoseSupplier(flywheel::getPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for a spinning roller, intake bar, or shooter wheel directly
+   * from its YAMS {@link SmartMotorController}'s encoder angle ({@code getMechanismPosition()}).
+   *
+   * @param rollerMotor YAMS {@link SmartMotorController} driving the wheel/roller.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the roller spins.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsRollerMotor(
+      SmartMotorController rollerMotor, Translation3d axleOriginMeters, MotionAxis spinAxis) {
+    return fromYamsRollerMotor(rollerMotor, axleOriginMeters, spinAxis, false);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for a spinning roller, intake bar, or shooter wheel directly
+   * from its YAMS {@link SmartMotorController} with optional spin inversion.
+   *
+   * @param rollerMotor YAMS {@link SmartMotorController} driving the wheel/roller.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the roller spins.
+   * @param inverted {@code true} to reverse visual spin direction.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsRollerMotor(
+      SmartMotorController rollerMotor,
+      Translation3d axleOriginMeters,
+      MotionAxis spinAxis,
+      boolean inverted) {
+    Objects.requireNonNull(rollerMotor, "rollerMotor");
+    return YamsMechanismBridge.fromSpinningWheel(
+        rollerMotor::getMechanismPosition, axleOriginMeters, spinAxis, inverted);
+  }
+
+  /**
+   * Mounts a YAMS roller motor's spinning bar/wheel directly onto a moving parent mechanism (such
+   * as an intake roller riding on a deploying slamtake arm).
+   *
+   * @param parentPoseSupplier Supplier returning the moving parent mechanism's {@link Pose3d}.
+   * @param rollerMotor YAMS {@link SmartMotorController} driving the roller.
+   * @param localAxleOffsetMeters Roller axle offset in the parent mechanism's local frame (meters).
+   * @param spinAxis Axis about which the roller spins in the parent frame.
+   * @param inverted {@code true} to reverse visual spin direction.
+   * @return Robot-relative {@link Pose3d} supplier for the mounted spinning roller.
+   */
+  public static Supplier<Pose3d> fromMountedYamsRoller(
+      Supplier<Pose3d> parentPoseSupplier,
+      SmartMotorController rollerMotor,
+      Translation3d localAxleOffsetMeters,
+      MotionAxis spinAxis,
+      boolean inverted) {
+    Objects.requireNonNull(rollerMotor, "rollerMotor");
+    return YamsMechanismBridge.fromMountedRoller(
+        parentPoseSupplier,
+        rollerMotor::getMechanismPosition,
+        localAxleOffsetMeters,
+        spinAxis,
+        inverted);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a YAMS {@link Arm} using the joint origin, orientation,
+   * motion axis, inversion, and zero offset stored in a {@link CadRobotManifest}.
+   *
+   * @param manifest Loaded {@link CadRobotManifest}.
+   * @param jointName Name of the revolute joint in the manifest.
+   * @param arm YAMS {@link Arm} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> poseSupplierFromManifest(
+      CadRobotManifest manifest, String jointName, Arm arm) {
+    Objects.requireNonNull(manifest, "manifest");
+    Objects.requireNonNull(arm, "arm");
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return buildRevoluteSupplier(joint, arm::getAngle);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a YAMS {@link Pivot} using the joint geometry stored in a
+   * {@link CadRobotManifest}.
+   *
+   * @param manifest Loaded {@link CadRobotManifest}.
+   * @param jointName Name of the revolute/continuous joint in the manifest.
+   * @param pivot YAMS {@link Pivot} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> poseSupplierFromManifest(
+      CadRobotManifest manifest, String jointName, Pivot pivot) {
+    Objects.requireNonNull(manifest, "manifest");
+    Objects.requireNonNull(pivot, "pivot");
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return buildRevoluteSupplier(joint, pivot::getAngle);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a YAMS {@link Elevator} using the joint origin,
+   * orientation, translation axis, inversion, and zero offset stored in a {@link CadRobotManifest}.
+   *
+   * @param manifest Loaded {@link CadRobotManifest}.
+   * @param jointName Name of the prismatic joint in the manifest.
+   * @param elevator YAMS {@link Elevator} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> poseSupplierFromManifest(
+      CadRobotManifest manifest, String jointName, Elevator elevator) {
+    Objects.requireNonNull(manifest, "manifest");
+    Objects.requireNonNull(elevator, "elevator");
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return () -> {
+      double d =
+          elevator.getHeight().in(org.wpilib.units.Units.Meters) * (joint.inverted() ? -1.0 : 1.0);
+      Translation3d delta =
+          switch (joint.axis()) {
+            case X -> new Translation3d(d, 0.0, 0.0);
+            case Y -> new Translation3d(0.0, d, 0.0);
+            case Z -> new Translation3d(0.0, 0.0, d);
+          };
+      return new Pose3d(joint.originMeters(), joint.originRotation())
+          .transformBy(new Transform3d(delta, new Rotation3d()))
+          .transformBy(joint.zeroOffset());
+    };
+  }
+
+  /**
+   * Binds a YAMS {@link Arm} directly to its child link in a manifest-loaded {@link
+   * CadRobotConfig}, reading pivot, axis, orientation, and inversion automatically from the
+   * manifest.
+   *
+   * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
+   *     CadRobotConfig#fromUrdf}.
+   * @param jointName Name of the joint in the manifest.
+   * @param arm YAMS {@link Arm} instance.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig bindFromManifest(
+      CadRobotConfig config, String jointName, Arm arm) {
+    Objects.requireNonNull(config, "config");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return config.withComponentPoseSupplier(
+        joint.childLink(), poseSupplierFromManifest(manifest, jointName, arm));
+  }
+
+  /**
+   * Binds a YAMS {@link Elevator} directly to its child link in a manifest-loaded {@link
+   * CadRobotConfig}, reading base origin, axis, orientation, and inversion automatically from the
+   * manifest.
+   *
+   * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
+   *     CadRobotConfig#fromUrdf}.
+   * @param jointName Name of the prismatic joint in the manifest.
+   * @param elevator YAMS {@link Elevator} instance.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig bindFromManifest(
+      CadRobotConfig config, String jointName, Elevator elevator) {
+    Objects.requireNonNull(config, "config");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return config.withComponentPoseSupplier(
+        joint.childLink(), poseSupplierFromManifest(manifest, jointName, elevator));
+  }
+
+  /**
+   * Binds a YAMS {@link Pivot} directly to its child link in a manifest-loaded {@link
+   * CadRobotConfig}.
+   *
+   * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
+   *     CadRobotConfig#fromUrdf}.
+   * @param jointName Name of the revolute/continuous joint in the manifest.
+   * @param pivot YAMS {@link Pivot} instance.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig bindFromManifest(
+      CadRobotConfig config, String jointName, Pivot pivot) {
+    Objects.requireNonNull(config, "config");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    return config.withComponentPoseSupplier(
+        joint.childLink(), poseSupplierFromManifest(manifest, jointName, pivot));
+  }
+
+  /**
+   * Binds a YAMS roller, intake bar, kicker, or flywheel {@link SmartMotorController} to a
+   * manifest-loaded {@link CadRobotConfig}. Automatically registers NT4 roller telemetry using the
+   * manifest's {@code wheelRadiusMeters}, and if the joint's {@code childLink} has a visual mesh in
+   * {@code config}, also binds its 3D spinning {@link Pose3d} supplier.
+   *
+   * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
+   *     CadRobotConfig#fromUrdf}.
+   * @param jointName Name of the continuous joint in the manifest.
+   * @param rollerMotor YAMS {@link SmartMotorController} driving the wheel or roller.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig bindFromManifest(
+      CadRobotConfig config, String jointName, SmartMotorController rollerMotor) {
+    Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(rollerMotor, "rollerMotor");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    Supplier<Pose3d> parentPose =
+        config.getComponentPoseSupplier(joint.parentLink()).orElse(null);
+    return bindFromManifest(config, jointName, rollerMotor, parentPose);
+  }
+
+  /**
+   * Binds a YAMS roller, intake bar, kicker, or flywheel {@link SmartMotorController} to a
+   * manifest-loaded {@link CadRobotConfig} with an explicit parent mechanism {@link Pose3d}
+   * supplier. If {@code parentPoseSupplier} is non-null (or automatically discovered from {@code
+   * joint.parentLink()}), the roller rides on the moving parent mechanism while spinning around its
+   * own local axle in AdvantageScope.
+   *
+   * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
+   *     CadRobotConfig#fromUrdf}.
+   * @param jointName Name of the continuous joint in the manifest.
+   * @param rollerMotor YAMS {@link SmartMotorController} driving the wheel or roller.
+   * @param parentPoseSupplier Optional moving parent {@link Pose3d} supplier, or {@code null} for
+   *     chassis-mounted rollers.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig bindFromManifest(
+      CadRobotConfig config,
+      String jointName,
+      SmartMotorController rollerMotor,
+      Supplier<Pose3d> parentPoseSupplier) {
+    Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(rollerMotor, "rollerMotor");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    if (joint.wheelRadiusMeters().isPresent()) {
+      config.addRollerTelemetry(
+          joint.name(),
+          rollerMotor::getMechanismVelocity,
+          joint.wheelRadiusMeters().getAsDouble());
+    }
+    if (config.hasComponent(joint.childLink())) {
+      Supplier<Pose3d> poseSupplier =
+          parentPoseSupplier != null
+              ? YamsMechanismBridge.fromMountedRoller(
+                  parentPoseSupplier,
+                  rollerMotor::getMechanismPosition,
+                  joint.originMeters(),
+                  joint.axis(),
+                  joint.inverted())
+              : buildRevoluteSupplier(joint, rollerMotor::getMechanismPosition);
+      config.withComponentPoseSupplier(joint.childLink(), poseSupplier);
+    }
+    return config;
+  }
+
+  private static Supplier<Pose3d> buildRevoluteSupplier(
+      CadJointManifest joint, Supplier<org.wpilib.units.measure.Angle> angleSupplier) {
+    return () -> {
+      double rad =
+          angleSupplier.get().in(org.wpilib.units.Units.Radians) * (joint.inverted() ? -1.0 : 1.0);
+      Rotation3d rot =
+          switch (joint.axis()) {
+            case X -> new Rotation3d(rad, 0.0, 0.0);
+            case Y -> new Rotation3d(0.0, rad, 0.0);
+            case Z -> new Rotation3d(0.0, 0.0, rad);
+          };
+      return new Pose3d(joint.originMeters(), joint.originRotation())
+          .transformBy(new Transform3d(new Translation3d(), rot))
+          .transformBy(joint.zeroOffset());
+    };
+  }
+
+  private static CadRobotManifest requireManifest(CadRobotConfig config) {
+    return config
+        .getManifest()
+        .orElseThrow(
+            () ->
+                new IllegalStateException(
+                    "CadRobotConfig '"
+                        + config.getRobotName()
+                        + "' was not created from a manifest or URDF. Use CadRobotConfig.fromManifest(...) or fromUrdf(...)."));
   }
 }

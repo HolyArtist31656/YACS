@@ -5,6 +5,9 @@
 package frc.robot.mechanisms;
 
 import static org.wpilib.units.Units.Amps;
+import static org.wpilib.units.Units.Inches;
+import static org.wpilib.units.Units.KilogramSquareMeters;
+import static org.wpilib.units.Units.Volts;
 import static org.wpilib.units.Units.Degrees;
 import static org.wpilib.units.Units.DegreesPerSecond;
 import static org.wpilib.units.Units.DegreesPerSecondPerSecond;
@@ -22,8 +25,11 @@ import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.system.DCMotor;
 import org.wpilib.math.util.Units;
 import org.wpilib.units.measure.Angle;
+import org.wpilib.units.measure.AngularVelocity;
 import yams.commands3.config.SmartMotorControllerConfig;
 import yams.commands3.mechanisms.Arm;
+import yams.commands3.mechanisms.FlyWheel;
+import yams.core.mechanisms.config.FlyWheelConfig;
 import yams.core.gearing.GearBox;
 import yams.core.gearing.MechanismGearing;
 import yams.core.mechanisms.config.ArmConfig;
@@ -70,7 +76,34 @@ public class SlamtakeMechanism implements Mechanism {
           .withLength(Meters.of(0.32))
           .withTelemetry("Slamtake", TelemetryVerbosity.HIGH);
 
+  // Exact intake roller constants from 6328 Slamtake.java & RobotContainer.java (SIMBOT)
+  public static final double ROLLER_INTAKE_VOLTS = 13.0;
+  public static final double ROLLER_OUTTAKE_VOLTS = -6.0;
+  public static final double ROLLER_RADIUS_METERS = Inches.of(1.0).in(Meters);
+
   private final Arm slamtake = new Arm(armConfig, smc);
+
+  private final SmartMotorControllerConfig rollerMotorConfig =
+      new SmartMotorControllerConfig(this)
+          .withControlMode(ControlMode.OPEN_LOOP)
+          .withGearing(new MechanismGearing(GearBox.fromReductionStages(1.0)))
+          .withMomentOfInertia(KilogramSquareMeters.of(0.005))
+          .withZeroPower(MotorMode.COAST)
+          .withStatorCurrentLimit(Amps.of(60))
+          .withTelemetry("IntakeRollerMotor", TelemetryVerbosity.HIGH);
+
+  private final SmartMotorController rollerSmc =
+      new TalonFXWrapper(
+          new TalonFX(14, new CANBus(CANPort.CAN_S0)),
+          DCMotor.getKrakenX60Foc(1),
+          rollerMotorConfig);
+
+  private final FlyWheel intakeRoller =
+      new FlyWheel(
+          new FlyWheelConfig()
+              .withDiameter(Inches.of(2.0))
+              .withTelemetry("IntakeRoller", TelemetryVerbosity.HIGH),
+          rollerSmc);
 
   public void setTargetAngle(Angle angle) {
     slamtake.setMechanismPositionSetpoint(angle);
@@ -97,11 +130,21 @@ public class SlamtakeMechanism implements Mechanism {
     return new Pose3d(robotToHopperX, 0.0, 0.37, new Rotation3d());
   }
 
+  public void setRollerVoltage(double volts) {
+    rollerSmc.setVoltage(Volts.of(volts));
+  }
+
+  public AngularVelocity getRollerVelocity() {
+    return rollerSmc.getMechanismVelocity();
+  }
+
   public void periodic() {
     slamtake.updateTelemetry();
+    intakeRoller.updateTelemetry();
   }
 
   public void simulationPeriodic() {
     slamtake.simIterate();
+    intakeRoller.simIterate();
   }
 }

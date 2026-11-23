@@ -1,6 +1,38 @@
+## [2027.2.0-alpha1] — Phase 2 Onshape Exporter & 3D Spinning Roller Visualization
+
+### Added
+- **Zero-Dependency Onshape Exporter (`tools/onshape-exporter/`)**: Pure Python 3 standard-library CLI (`yacsim_onshape_exporter.py`) calling Onshape REST API v6 (`GetAssemblyDefinition`, `GetAssemblyMassProperties`, `GetAssemblyBoundingBoxes`, async GLTF translation) to generate `yacsim-robot.json` + `.glb` assets, plus `--augment-rollers` offline mode and `roller_glb_generator.py` for high-contrast, color-striped 3D spinning roller `.glb` meshes.
+- **Automatic Parent-Mounted Roller 3D Binding**: Added `CadRobotConfig.getComponentPoseSupplier(String)` and enhanced `YamsCommands3Bridge.bindFromManifest(config, jointName, rollerMotor)` so rollers parented to moving mechanisms (such as Darwin's `IntakeRoller` on `Slamtake`) automatically ride on their parent and spin in AdvantageScope 3D Field.
+- **Darwin Manifest Example With 5 Live Spinning 3D Rollers**: `examples/commands3/darwin_6328_manifest_2027/` now ships with `model_4.glb`-`model_8.glb` (`FlywheelMesh`, `KickerFrontMesh`, `KickerBackMesh`, `HopperRollerMesh`, `IntakeRollerMesh`) wired directly in `yacsim-robot.json`.
+- **Build & Test Fixes**: Fixed `vendordepJson.gradle` to declare `pubVersion` as a task input; switched `YamsMechanismBridge.fromAngularVelocity` to HAL-free `System.nanoTime()`; added 1 Java test (**41 JUnit 5 tests across 9 classes**) + 4 Python exporter unit tests.
+- **Documentation**: Added `docs/ONSHAPE_EXPORTER_GUIDE.md` and `tools/onshape-exporter/README.md`.
+
+## [2027.1.0-alpha1] — Phase 1 CAD-to-YACSim Automation (Manifest & URDF)
+
+### Added
+- **`yacsim.core.manifest` Package**: Zero-dependency `yacsim-robot.json` manifest schema (`CadRobotManifest`, `CadLinkManifest`, `CadJointManifest`, `CadJointType`) and XXE-hardened URDF XML importer (`CadManifestLoader.loadJson`, `loadUrdf`, `toPrettyJson`, `writeJson`).
+- **Exact CAD Mass & Inertia Override**: `CadAssetConfig.withMassPropertiesOverride(CadMassProperties)` honored directly in `MeshParser` (and cache key), replacing bounding-box estimates with exact CAD mass, CoM, and principal inertia (`Ixx`/`Iyy`/`Izz`).
+- **Manifest & URDF Robot Factories**: `CadRobotConfig.fromManifest(Path)`, `fromManifest(CadRobotManifest, Path)`, `fromUrdf(Path)`, `getManifest()`, `hasComponent(String)`, and name-based `withComponentPoseSupplier(String, Supplier<Pose3d>)`.
+- **One-Line Manifest YAMS Binding**: `YamsCommands3Bridge.bindFromManifest(...)` and `poseSupplierFromManifest(...)` for `Arm`, `Elevator`, `Pivot`, and `SmartMotorController` (rollers/flywheels).
+- **New Manifest-Driven Example (`examples/commands3/darwin_6328_manifest_2027/`)**: Full FRC 6328 *Darwin* simulation driven by `src/main/deploy/yacsim/darwin/yacsim-robot.json` referencing Darwin's Onshape assembly, keeping only CAN IDs, motor types, gear ratios, and PID/FF gains in Java.
+- **Documentation & Tests**: Added `docs/CAD_MANIFEST_GUIDE.md` and `CadManifestLoaderTest` (5 new tests; **40 JUnit 5 tests across 9 test classes**).
+
 # Changelog
 
 All notable changes to YACSim are documented here.
+
+## `v2027.0.7-alpha1` — Spinning Wheels, Intake Rollers & Flywheel Simulation
+
+### Added
+- **Spinning Wheel, Roller & Flywheel Adapters**:
+  - Added `YamsMechanismBridge.fromSpinningWheel(...)`, `fromAngularVelocity(...)`, and `fromMountedRoller(...)` (for intake bars riding on deploying arms).
+  - Added `YamsCommands3Bridge.fromYamsFlyWheel(...)`, `fromYamsRollerMotor(...)`, and `fromMountedYamsRoller(...)`.
+- **Roller & Flywheel Telemetry Pipeline**:
+  - Added `CadRollerTelemetryConfig` and `CadRobotConfig.addRollerTelemetry(...)` to publish `/<tableName>/Rollers/<name>/{VelocityRPM,SurfaceSpeedMPS,Spinning}` in `AdvantageScopePublisher`—supporting both standalone wheel `.glb`s and baked-in CAD rollers.
+- **Full FRC 6328 *Darwin* YAMS 2027 Conversion**:
+  - Ported Darwin's original `Flywheel` (4× Kraken X60 FOC), `Kicker` (`KickerFront` 2.5" + `KickerBack` 1.58"), `HopperRoller` (2× Kraken X60 FOC, 4:1), and `Slamtake` `IntakeRoller` (1× Kraken X60 FOC, 13 V) to YAMS 2027 `FlyWheel` + `TalonFXWrapper` and wired live telemetry into `DarwinCadSim`.
+- **Javadoc & Tests**:
+  - Updated `package-info.java` links in `advantagescope`, `cad`, and `physics`; expanded JUnit 5 suite from 32 to 35 tests.
 
 ## `v2027.0.6-alpha1` — AdvantageScope Import, CAD Presets, Linkages, Swerve Adapter & Managed Sim
 

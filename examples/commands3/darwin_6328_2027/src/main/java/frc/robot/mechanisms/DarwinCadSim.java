@@ -29,7 +29,10 @@ public class DarwinCadSim implements Mechanism {
       Supplier<Pose2d> fieldPoseSupplier,
       HoodMechanism hood,
       SlamtakeMechanism slamtake,
-      CompactorMechanism compactor)
+      CompactorMechanism compactor,
+      FlywheelMechanism flywheel,
+      KickerMechanism kicker,
+      HopperRollerMechanism hopperRoller)
       throws IOException {
     Path darwinDir = Filesystem.getDeployDirectory().toPath().resolve("yacsim/models/darwin");
     Path ascopeDir =
@@ -91,6 +94,16 @@ public class DarwinCadSim implements Mechanism {
         .withDrivetrainPoseSupplier(fieldPoseSupplier)
         .withExtensionMargin(0.35, 1.85)
         .ignoreRestingOverlaps()
+        .addRollerTelemetry(
+            "Flywheel", flywheel::getVelocity, FlywheelMechanism.WHEEL_RADIUS_METERS)
+        .addRollerTelemetry(
+            "KickerFront", kicker::getFrontVelocity, KickerMechanism.FRONT_ROLLER_RADIUS_METERS)
+        .addRollerTelemetry(
+            "KickerBack", kicker::getBackVelocity, KickerMechanism.BACK_ROLLER_RADIUS_METERS)
+        .addRollerTelemetry(
+            "HopperRoller", hopperRoller::getVelocity, HopperRollerMechanism.ROLLER_RADIUS_METERS)
+        .addRollerTelemetry(
+            "IntakeRoller", slamtake::getRollerVelocity, SlamtakeMechanism.ROLLER_RADIUS_METERS)
         .addCamera(
             "FrontCamera",
             new Transform3d(

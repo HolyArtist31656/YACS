@@ -6,6 +6,7 @@ package yacsim.core.yams;
 
 import static org.wpilib.units.Units.Meters;
 import static org.wpilib.units.Units.Radians;
+import static org.wpilib.units.Units.RadiansPerSecond;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,6 +18,7 @@ import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.units.measure.Angle;
+import org.wpilib.units.measure.AngularVelocity;
 import org.wpilib.units.measure.Distance;
 import org.wpilib.units.measure.Mass;
 import org.wpilib.units.measure.MomentOfInertia;
@@ -318,5 +320,128 @@ public final class YamsMechanismBridge {
           new Translation3d(armLengthMeters, 0.0, 0.0).rotateBy(rotationAxis.toRotation3d(rad));
       return new Pose3d(pivotMeters.plus(armTipOffset), new Rotation3d());
     };
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a spinning wheel, roller bar, or flywheel from a
+   * continuous rotor/shaft {@link Angle} supplier (such as {@code
+   * SmartMotorController::getMechanismPosition}).
+   *
+   * @param wheelAngleSupplier Supplier returning the cumulative wheel {@link Angle}.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the wheel spins (typically {@link MotionAxis#Y} for horizontal
+   *     intake/shooter rollers).
+   * @return Robot-relative {@link Pose3d} supplier for the spinning wheel mesh.
+   */
+  public static Supplier<Pose3d> fromSpinningWheel(
+      Supplier<Angle> wheelAngleSupplier, Translation3d axleOriginMeters, MotionAxis spinAxis) {
+    return fromSpinningWheel(wheelAngleSupplier, axleOriginMeters, spinAxis, false);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a spinning wheel, roller bar, or flywheel with optional
+   * spin-direction inversion.
+   *
+   * @param wheelAngleSupplier Supplier returning the cumulative wheel {@link Angle}.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the wheel spins.
+   * @param inverted {@code true} to reverse visual spin direction.
+   * @return Robot-relative {@link Pose3d} supplier for the spinning wheel mesh.
+   */
+  public static Supplier<Pose3d> fromSpinningWheel(
+      Supplier<Angle> wheelAngleSupplier,
+      Translation3d axleOriginMeters,
+      MotionAxis spinAxis,
+      boolean inverted) {
+    return fromAngleSupplier(wheelAngleSupplier, axleOriginMeters, spinAxis, inverted);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a spinning wheel, roller, or flywheel by integrating an
+   * {@link AngularVelocity} supplier over elapsed simulation time.
+   *
+   * @param velocitySupplier Supplier returning the current {@link AngularVelocity}.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the wheel spins.
+   * @return Robot-relative {@link Pose3d} supplier integrating spin angle automatically.
+   */
+  public static Supplier<Pose3d> fromAngularVelocity(
+      Supplier<AngularVelocity> velocitySupplier,
+      Translation3d axleOriginMeters,
+      MotionAxis spinAxis) {
+    return fromAngularVelocity(velocitySupplier, axleOriginMeters, spinAxis, false);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a spinning wheel, roller, or flywheel by integrating an
+   * {@link AngularVelocity} supplier with optional direction inversion.
+   *
+   * @param velocitySupplier Supplier returning the current {@link AngularVelocity}.
+   * @param axleOriginMeters Axle center coordinates in robot-frame meters.
+   * @param spinAxis Axis about which the wheel spins.
+   * @param inverted {@code true} to reverse visual spin direction.
+   * @return Robot-relative {@link Pose3d} supplier integrating spin angle automatically.
+   */
+  public static Supplier<Pose3d> fromAngularVelocity(
+      Supplier<AngularVelocity> velocitySupplier,
+      Translation3d axleOriginMeters,
+      MotionAxis spinAxis,
+      boolean inverted) {
+    Objects.requireNonNull(velocitySupplier, "velocitySupplier");
+    Objects.requireNonNull(axleOriginMeters, "axleOriginMeters");
+    Objects.requireNonNull(spinAxis, "spinAxis");
+    double sign = inverted ? -1.0 : 1.0;
+    final double[] state = {Double.NaN, 0.0}; // [lastTimestampSec, accumulatedRad]
+    return () -> {
+      double now = System.nanoTime() * 1e-9;
+      double dt = Double.isNaN(state[0]) ? 0.02 : Math.min(0.1, Math.max(0.0, now - state[0]));
+      state[0] = now;
+      AngularVelocity vel = velocitySupplier.get();
+      double radPerSec = vel != null ? sign * vel.in(RadiansPerSecond) : 0.0;
+      state[1] = (state[1] + radPerSec * dt) % (2.0 * Math.PI);
+      return new Pose3d(axleOriginMeters, spinAxis.toRotation3d(state[1]));
+    };
+  }
+
+  /**
+   * Mounts a spinning roller bar or wheel (for example, an intake roller on a deploying intake arm)
+   * onto a moving parent mechanism by chaining the parent pose with the roller's local spinning
+   * axle pose.
+   *
+   * @param parentPoseSupplier Supplier returning the moving parent mechanism's {@link Pose3d}.
+   * @param rollerAngleSupplier Supplier returning the roller's cumulative {@link Angle}.
+   * @param localAxleOffsetMeters Roller axle offset in the parent mechanism's local frame (meters).
+   * @param spinAxis Axis about which the roller spins in the parent frame.
+   * @return Robot-relative {@link Pose3d} supplier for the mounted spinning roller.
+   */
+  public static Supplier<Pose3d> fromMountedRoller(
+      Supplier<Pose3d> parentPoseSupplier,
+      Supplier<Angle> rollerAngleSupplier,
+      Translation3d localAxleOffsetMeters,
+      MotionAxis spinAxis) {
+    return fromMountedRoller(
+        parentPoseSupplier, rollerAngleSupplier, localAxleOffsetMeters, spinAxis, false);
+  }
+
+  /**
+   * Mounts a spinning roller bar or wheel onto a moving parent mechanism with optional spin
+   * direction inversion.
+   *
+   * @param parentPoseSupplier Supplier returning the moving parent mechanism's {@link Pose3d}.
+   * @param rollerAngleSupplier Supplier returning the roller's cumulative {@link Angle}.
+   * @param localAxleOffsetMeters Roller axle offset in the parent mechanism's local frame (meters).
+   * @param spinAxis Axis about which the roller spins in the parent frame.
+   * @param inverted {@code true} to reverse visual spin direction.
+   * @return Robot-relative {@link Pose3d} supplier for the mounted spinning roller.
+   */
+  public static Supplier<Pose3d> fromMountedRoller(
+      Supplier<Pose3d> parentPoseSupplier,
+      Supplier<Angle> rollerAngleSupplier,
+      Translation3d localAxleOffsetMeters,
+      MotionAxis spinAxis,
+      boolean inverted) {
+    Supplier<Pose3d> localSpin =
+        fromSpinningWheel(rollerAngleSupplier, localAxleOffsetMeters, spinAxis, inverted);
+    return chainParentChild(parentPoseSupplier, localSpin);
   }
 }

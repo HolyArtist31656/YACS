@@ -9,6 +9,7 @@ import static org.wpilib.units.Units.Degrees;
 import static org.wpilib.units.Units.KilogramSquareMeters;
 import static org.wpilib.units.Units.Kilograms;
 import static org.wpilib.units.Units.Meters;
+import static org.wpilib.units.Units.RadiansPerSecond;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -20,6 +21,7 @@ import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.units.measure.Angle;
+import org.wpilib.units.measure.AngularVelocity;
 import org.wpilib.units.measure.Distance;
 import yacsim.core.cad.MeshFormat;
 import yacsim.core.cad.MeshMetadata;
@@ -123,5 +125,37 @@ class YamsMechanismBridgeTest {
     assertEquals(0.2, pose.getX(), 1e-6);
     assertEquals(0.8, pose.getZ(), 1e-6);
     assertEquals(0.0, pose.getRotation().getY(), 1e-6);
+  }
+
+  @Test
+  void fromSpinningWheelAndMountedRollerComposeParentAndSpinRotation() {
+    AtomicReference<Angle> wheelAngle = new AtomicReference<>(Degrees.of(90.0));
+    Supplier<Pose3d> parentPose =
+        () -> new Pose3d(new Translation3d(0.3, 0.0, 0.2), new Rotation3d());
+
+    Supplier<Pose3d> standalone =
+        YamsMechanismBridge.fromSpinningWheel(
+            wheelAngle::get, new Translation3d(0.1, 0.0, 0.4), MotionAxis.Y);
+    assertEquals(Math.PI / 2.0, standalone.get().getRotation().getY(), 1e-6);
+
+    Supplier<Pose3d> mounted =
+        YamsMechanismBridge.fromMountedRoller(
+            parentPose, wheelAngle::get, new Translation3d(0.2, 0.0, 0.0), MotionAxis.Y, true);
+    Pose3d pose = mounted.get();
+    assertEquals(0.5, pose.getX(), 1e-6);
+    assertEquals(0.2, pose.getZ(), 1e-6);
+    assertEquals(-Math.PI / 2.0, pose.getRotation().getY(), 1e-6);
+  }
+
+  @Test
+  void fromAngularVelocityIntegratesSpinAngleWithoutNaN() {
+    AtomicReference<AngularVelocity> speed = new AtomicReference<>(RadiansPerSecond.of(50.0));
+    Supplier<Pose3d> wheel =
+        YamsMechanismBridge.fromAngularVelocity(
+            speed::get, new Translation3d(0.0, 0.0, 0.5), MotionAxis.Y);
+
+    Pose3d first = wheel.get();
+    assertEquals(0.5, first.getZ(), 1e-6);
+    assertEquals(1.0, first.getRotation().getY(), 1e-6); // 100 rad/s * 0.02s initial step
   }
 }

@@ -5,7 +5,7 @@ Open **this `vendordep/` directory** in **WPILib 2027 VS Code** to build, test, 
 ## Common Commands
 
 ```powershell
-# Format, build, run all 32 JUnit 5 tests, and generate Javadoc
+# Format, build, run all 41 JUnit 5 tests, and generate Javadoc
 .\gradlew spotlessApply build test javadoc "-Dorg.gradle.java.home=C:\Users\Public\wpilib\2027_alpha7\jdk"
 
 # Publish local Maven artifacts (build/maven/releases) and yacsim_commands3.json

@@ -7,6 +7,7 @@ package yacsim.core.model;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.wpilib.units.Units.RadiansPerSecond;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -270,6 +271,24 @@ class CadRobotSimulatorTest {
     glb.putInt(0x4E4F534A);
     glb.put(jsonBytes);
     return glb.array();
+  }
+
+  @Test
+  void samplesRollerTelemetryInSimSnapshot(@TempDir Path tempDir) throws IOException {
+    Path boxMesh = tempDir.resolve("box.stl");
+    Files.writeString(boxMesh, cubeStl(0.4, 0.4, 0.2), StandardCharsets.UTF_8);
+
+    CadRobotConfig robot =
+        new CadRobotConfig("RollerSimBot")
+            .withChassisAsset(new CadAssetConfig(boxMesh))
+            .addRollerTelemetry("Flywheel", () -> RadiansPerSecond.of(175.0), 0.0508)
+            .addRollerTelemetry("IntakeRoller", () -> RadiansPerSecond.of(40.0), 0.0254);
+
+    try (CadRobotSimulator sim = new CadRobotSimulator(robot, false)) {
+      sim.simIterate();
+      assertEquals(175.0, sim.getLatestRollerVelocitiesRadPerSec().get("Flywheel"), 1e-6);
+      assertEquals(40.0, sim.getLatestRollerVelocitiesRadPerSec().get("IntakeRoller"), 1e-6);
+    }
   }
 
   private static String cubeStl(double sx, double sy, double sz) {

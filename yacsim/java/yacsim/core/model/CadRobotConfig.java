@@ -23,8 +23,12 @@ import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
+import org.wpilib.units.measure.AngularVelocity;
 import yacsim.core.advantagescope.CadCameraConfig;
 import yacsim.core.cad.CadAssetConfig;
+import yacsim.core.manifest.CadLinkManifest;
+import yacsim.core.manifest.CadManifestLoader;
+import yacsim.core.manifest.CadRobotManifest;
 import yacsim.core.util.MinimalJson;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.physics.BoundingBox3d;
@@ -35,10 +39,12 @@ import yacsim.core.physics.BoundingBox3d;
  */
 public final class CadRobotConfig {
   private final String robotName;
+  private CadRobotManifest manifest = null;
   private CadDrivetrainConfig drivetrainConfig = null;
   private CadAssetConfig chassisAsset = null;
   private final List<CadComponentConfig> components = new ArrayList<>();
   private final List<CadCameraConfig> cameras = new ArrayList<>();
+  private final List<CadRollerTelemetryConfig> rollerTelemetries = new ArrayList<>();
   private final Set<String> ignoredCollisionPairs = new LinkedHashSet<>();
   private Supplier<Pose2d> drivetrainPoseSupplier = () -> new Pose2d();
   private String telemetryTable = "YACSim";
@@ -417,6 +423,140 @@ public final class CadRobotConfig {
    * @param poseSupplier Pose supplier for the component.
    * @return This config for chaining.
    */
+
+  /**
+   * Loads a {@link CadRobotConfig} from a {@code yacsim-robot.json} manifest, automatically
+   * populating chassis/link meshes, AdvantageScope zeroed transforms, exact CAD mass properties,
+   * cameras, and collision/extension settings.
+   *
+   * <p>Bind live mechanism poses afterward by link name via {@link
+   * #withComponentPoseSupplier(String, Supplier)} or {@code YamsCommands3Bridge.bindFromManifest}.
+   *
+   * @param manifestPath Path to {@code yacsim-robot.json}.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If the manifest file cannot be read.
+   */
+  public static CadRobotConfig fromManifest(Path manifestPath) throws IOException {
+    Objects.requireNonNull(manifestPath, "manifestPath");
+    CadRobotManifest loaded = CadManifestLoader.loadJson(manifestPath);
+    Path baseDir = manifestPath.toAbsolutePath().normalize().getParent();
+    return fromManifest(loaded, baseDir != null ? baseDir : Path.of("."));
+  }
+
+  /**
+   * Builds a {@link CadRobotConfig} from an already-parsed {@link CadRobotManifest} (useful when
+   * mechanisms share the same loaded manifest instance).
+   *
+   * @param manifest Parsed {@link CadRobotManifest}.
+   * @param baseDir Base directory used to resolve relative mesh paths in the manifest.
+   * @return Pre-populated {@link CadRobotConfig}.
+   */
+  public static CadRobotConfig fromManifest(CadRobotManifest manifest, Path baseDir) {
+    Objects.requireNonNull(manifest, "manifest");
+    Objects.requireNonNull(baseDir, "baseDir");
+    CadRobotConfig cfg = new CadRobotConfig(manifest.robotName());
+    cfg.manifest = manifest;
+    cfg.withIgnoreRestingOverlaps(manifest.ignoreRestingOverlaps());
+    cfg.withAutoGroundChassis(manifest.autoGroundChassis());
+    cfg.withDisableAdvantageScopeSimplification(manifest.disableAdvantageScopeSimplification());
+    if (manifest.extensionXyMarginMeters().isPresent()
+        && manifest.extensionMaxHeightMeters().isPresent()) {
+      cfg.withExtensionMargin(
+          manifest.extensionXyMarginMeters().getAsDouble(),
+          manifest.extensionMaxHeightMeters().getAsDouble());
+    }
+    if (manifest.chassis().isPresent() && manifest.chassis().get().hasMesh()) {
+      cfg.withChassisAsset(manifest.chassis().get().toCadAssetConfig(baseDir));
+    }
+    for (CadLinkManifest link : manifest.links()) {
+      if (!link.hasMesh()) {
+        continue;
+      }
+      String parentName =
+          manifest.joints().stream()
+              .filter(j -> j.childLink().equals(link.name()))
+              .map(j -> j.parentLink())
+              .findFirst()
+              .orElse("Chassis");
+      cfg.addComponent(
+          new CadComponentConfig(link.name(), link.toCadAssetConfig(baseDir))
+              .withParentComponent(parentName)
+              .withCollisionEnabled(link.collisionEnabled()));
+    }
+    for (CadCameraConfig cam : manifest.cameras()) {
+      cfg.addCamera(cam);
+    }
+    return cfg;
+  }
+
+  /**
+   * Imports a standard URDF XML file ({@code .urdf} or {@code .xml}) exported by Onshape ({@code
+   * onshape-to-robot}), Fusion 360, or SolidWorks directly into a {@link CadRobotConfig}.
+   *
+   * @param urdfPath Path to the URDF XML file.
+   * @return Pre-populated {@link CadRobotConfig} with attached {@link CadRobotManifest}.
+   * @throws IOException If reading or parsing the URDF fails.
+   */
+  public static CadRobotConfig fromUrdf(Path urdfPath) throws IOException {
+    Objects.requireNonNull(urdfPath, "urdfPath");
+    CadRobotManifest loaded = CadManifestLoader.loadUrdf(urdfPath);
+    Path baseDir = urdfPath.toAbsolutePath().normalize().getParent();
+    return fromManifest(loaded, baseDir != null ? baseDir : Path.of("."));
+  }
+
+  /**
+   * Binds a {@link Pose3d} supplier to an existing component by its link/component name (case
+   * sensitive), ideal after {@link #fromManifest(Path)} or {@link #fromUrdf(Path)}.
+   *
+   * @param componentName Registered component name (for example {@code "Hood"} or {@code
+   *     "Slamtake"}).
+   * @param poseSupplier Live {@link Pose3d} supplier.
+   * @return This config for chaining.
+   * @throws IllegalArgumentException If no component with {@code componentName} is registered.
+   */
+  public CadRobotConfig withComponentPoseSupplier(
+      String componentName, Supplier<Pose3d> poseSupplier) {
+    Objects.requireNonNull(componentName, "componentName");
+    Objects.requireNonNull(poseSupplier, "poseSupplier");
+    for (CadComponentConfig comp : components) {
+      if (comp.getName().equals(componentName)) {
+        comp.withPoseSupplier(poseSupplier);
+        return this;
+      }
+    }
+    throw new IllegalArgumentException(
+        "No component named '" + componentName + "' in CadRobotConfig '" + robotName + "'.");
+  }
+
+  /**
+   * Returns whether a visual component with the given name is registered in this config.
+   *
+   * @param componentName Component name to check.
+   * @return {@code true} if present.
+   */
+  public boolean hasComponent(String componentName) {
+    if (componentName == null) {
+      return false;
+    }
+    return components.stream().anyMatch(c -> c.getName().equals(componentName));
+  }
+
+  /**
+   * Returns the live {@link Pose3d} supplier registered for the named component, if present.
+   *
+   * @param componentName Component name to look up.
+   * @return Registered pose supplier, or empty if no component with that name exists.
+   */
+  public Optional<Supplier<Pose3d>> getComponentPoseSupplier(String componentName) {
+    if (componentName == null) {
+      return Optional.empty();
+    }
+    return components.stream()
+        .filter(c -> c.getName().equals(componentName))
+        .map(CadComponentConfig::getPoseSupplier)
+        .findFirst();
+  }
+
   public CadRobotConfig withComponentPoseSupplier(int index, Supplier<Pose3d> poseSupplier) {
     Objects.requireNonNull(poseSupplier, "poseSupplier");
     components.get(index).withPoseSupplier(poseSupplier);
@@ -477,9 +617,44 @@ public final class CadRobotConfig {
         new CadCameraConfig(name, robotToCamera, fovDegrees, resolutionWidthPx, resolutionHeightPx));
   }
 
+
+  /**
+   * Registers a spinning wheel, roller bar, or flywheel for automatic NetworkTables telemetry
+   * ({@code VelocityRPM}, {@code SurfaceSpeedMPS}, and {@code Spinning}) under {@code
+   * /<telemetryTable>/Rollers/<name>/}. Works whether or not a separate {@code .glb} mesh exists
+   * for the roller.
+   *
+   * @param rollerConfig Roller telemetry configuration.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig addRollerTelemetry(CadRollerTelemetryConfig rollerConfig) {
+    this.rollerTelemetries.add(Objects.requireNonNull(rollerConfig, "rollerConfig"));
+    return this;
+  }
+
+  /**
+   * Convenience overload registering a spinning wheel, roller, or flywheel for automatic NT4
+   * telemetry.
+   *
+   * @param name Unique roller/flywheel name (for example {@code "Flywheel"}).
+   * @param angularVelocitySupplier Supplier returning the current {@link AngularVelocity}.
+   * @param wheelRadiusMeters Positive wheel or roller radius in meters.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig addRollerTelemetry(
+      String name, Supplier<AngularVelocity> angularVelocitySupplier, double wheelRadiusMeters) {
+    return addRollerTelemetry(
+        new CadRollerTelemetryConfig(name, angularVelocitySupplier, wheelRadiusMeters));
+  }
+
   /** @return Configured robot name. */
   public String getRobotName() {
     return robotName;
+  }
+
+  /** @return Underlying CAD manifest if created via {@link #fromManifest} or {@link #fromUrdf}. */
+  public Optional<CadRobotManifest> getManifest() {
+    return Optional.ofNullable(manifest);
   }
 
   /** @return Attached drivetrain configuration, if present. */
@@ -565,5 +740,10 @@ public final class CadRobotConfig {
   /** @return Unmodifiable list of configured AdvantageScope cameras. */
   public List<CadCameraConfig> getCameras() {
     return Collections.unmodifiableList(cameras);
+  }
+
+  /** @return Unmodifiable list of registered spinning roller/flywheel telemetry configs. */
+  public List<CadRollerTelemetryConfig> getRollerTelemetries() {
+    return Collections.unmodifiableList(rollerTelemetries);
   }
 }

@@ -131,6 +131,35 @@ Supplier<Pose3d> wristPose =
         arm, new Translation3d(0.2, 0.0, 0.4), 0.55, MotionAxis.Y, true);
 ```
 
+### Spinning Wheels, Intake Bars, Rollers & Flywheels
+
+YACSim supports both CAD workflows used by FRC teams:
+
+1. **Separate wheel/roller `.glb` meshes** (animating 3D spin in AdvantageScope):
+   ```java
+   // Standalone shooter flywheel from YAMS FlyWheel or SmartMotorController
+   Supplier<Pose3d> flywheelPose =
+       YamsCommands3Bridge.fromYamsRollerMotor(
+           flywheelSmc, new Translation3d(-0.15, 0.0, 0.48), MotionAxis.Y);
+
+   // Intake roller bar mounted on a deploying intake arm
+   Supplier<Pose3d> intakeBarPose =
+       YamsCommands3Bridge.fromMountedYamsRoller(
+           slamtakePose, intakeRollerSmc, new Translation3d(0.28, 0.0, 0.0), MotionAxis.Y, false);
+
+   // Or integrate directly from an AngularVelocity supplier
+   Supplier<Pose3d> integratedWheel =
+       YamsMechanismBridge.fromAngularVelocity(
+           flywheel::getVelocity, new Translation3d(-0.15, 0.0, 0.48), MotionAxis.Y);
+   ```
+2. **Baked-in rollers (no separate wheel `.glb`, like FRC 6328 *Darwin*)**:
+   Register each roller/flywheel with `CadRobotConfig.addRollerTelemetry(...)` to publish live `VelocityRPM`, `SurfaceSpeedMPS`, and `Spinning` under `/YACSim/Rollers/<name>/`:
+   ```java
+   robotConfig
+       .addRollerTelemetry("Flywheel", flywheel::getVelocity, Units.inchesToMeters(2.0))
+       .addRollerTelemetry("IntakeRoller", slamtake::getRollerVelocity, Units.inchesToMeters(1.0));
+   ```
+
 ### Direct YAMS `SwerveDrive` Adapter
 
 ```java
@@ -237,3 +266,12 @@ See `examples/commands3/darwin_6328_2027/` for a complete port of FRC Team 6328 
 - Downloads 6328's MIT-licensed `.glb` models (`model.glb` through `model_3.glb`) via `setup_darwin_cad.ps1`.
 - Models the `Hood`, `Slamtake`, coupled pin-in-slot `FrontHopper`, and `TrashCompactor`.
 - Verified live in AdvantageScope under a strict `-Xmx256m` robot JVM cap (`-XX:MaxHeapSize=268435456`).
+
+---
+
+## Automated CAD Manifests (`yacsim-robot.json`) & URDF Import
+
+Want CAD to feed your mesh paths, AdvantageScope zeroing, exact mass/inertia tensors, joint origins, motion axes, hard/soft limits, and roller radii automatically into both YACSim and YAMS 2027 while keeping only CAN IDs, motor types, gear ratios, and PID/FF gains in Java?
+
+- Read the full [CAD Manifest & URDF Automation Guide](CAD_MANIFEST_GUIDE.md).
+- Compare the manual [`darwin_6328_2027`](../examples/commands3/darwin_6328_2027/) example against the manifest-driven [`darwin_6328_manifest_2027`](../examples/commands3/darwin_6328_manifest_2027/README.md) example.
