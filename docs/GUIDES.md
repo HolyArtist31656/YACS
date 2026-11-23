@@ -39,6 +39,39 @@ CadRobotConfig config =
 
 `AdvantageScopeConfigGenerator.resolveDefaultUserAssetsDir()` resolves `%APPDATA%\AdvantageScope\userAssets` on Windows, `~/Library/Application Support/AdvantageScope/userAssets` on macOS, and `$XDG_CONFIG_HOME/AdvantageScope/userAssets` (or `~/.config/AdvantageScope/userAssets`) on Linux.
 
+### Importing an Existing AdvantageScope `Robot_<Name>` Directory
+
+If your team already maintains an AdvantageScope `Robot_<Name>/config.json`, import the chassis, all `model_0..N.glb` components, ordered zeroed rotations, positions, and cameras in one call:
+
+```java
+CadRobotConfig config =
+    CadRobotConfig.fromAdvantageScopeDir(darwinDir)
+        .withDrivetrainPoseSupplier(drive::getPose)
+        .withExtensionMargin(0.35, 1.85)
+        .ignoreRestingOverlaps()
+        .withComponentPoseSupplier(0, "Hood", hood::getPose3d)
+        .withComponentPoseSupplier(1, "Slamtake", slamtakePose);
+```
+
+### CAD-Tool Coordinate-System Presets
+
+Avoid guessing axis rotation sequences for common CAD exporters by applying a `CadCoordinateSystem` preset:
+
+```java
+CadAssetConfig chassis =
+    new CadAssetConfig(models.resolve("chassis.glb"))
+        .withCoordinateSystem(CadCoordinateSystem.ONSHAPE_GLTF); // or SOLIDWORKS_MM, FUSION_360_MM, BLENDER_GLTF
+```
+
+### Camera Frustums & Starter AdvantageScope Layout
+
+Register vision cameras so they appear in AdvantageScope's 3D field view and export a pre-wired layout JSON:
+
+```java
+config.addCamera("FrontCam", robotToCam, 70.0, 1280, 800);
+AdvantageScopeConfigGenerator.exportStarterLayout(config, Path.of("yacsim-layout.json"));
+```
+
 ### Ordered Multi-Axis Rotations
 
 `AdvantageScopeConfigGenerator.exportAssetBundle(config, outputDir)` writes a complete `Robot_<Name>/` directory containing `config.json`, `model.glb`, and `model_0.glb` … `model_N.glb`.
@@ -82,6 +115,28 @@ Supplier<Pose3d> elevatorPose =
 Supplier<Pose3d> turretPose =
     YamsCommands3Bridge.fromYamsPivot(
         turret, new Translation3d(-0.15, 0.0, 0.48), MotionAxis.Z, true);
+```
+
+### Multi-Stage Cascading Elevators & 4-Bar Linkages
+
+```java
+// 3-stage cascading elevator (1/3, 2/3, 3/3 travel)
+List<Supplier<Pose3d>> stages =
+    YamsCommands3Bridge.fromCascadingElevator(
+        elevator, 3, new Translation3d(0.0, 0.0, 0.1), MotionAxis.Z);
+
+// Level-riding 4-bar end-effector
+Supplier<Pose3d> wristPose =
+    YamsCommands3Bridge.fromFourBar(
+        arm, new Translation3d(0.2, 0.0, 0.4), 0.55, MotionAxis.Y, true);
+```
+
+### Direct YAMS `SwerveDrive` Adapter
+
+```java
+CadDrivetrainConfig drivetrain =
+    YamsCommands3Bridge.fromYamsSwerve(
+        swerveDrive, chassisAsset, forkAsset, wheelAsset, 0.0508, moduleCorners);
 ```
 
 ### Generic Suppliers & Parent–Child Chains (`YamsMechanismBridge`)

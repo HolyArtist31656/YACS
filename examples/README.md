@@ -13,7 +13,7 @@ cd vendordep
 
 ## 1. `commands3/arm_and_elevator_2027`
 
-A self-contained starter robot with 5 bundled `.glb` meshes (`chassis.glb`, `swerve_fork.glb`, `swerve_wheel.glb`, `elevator_carriage.glb`, `arm.glb`) demonstrating `YamsDrivetrainBridge`, `YamsMechanismBridge.fromDistanceSupplier` / `fromAngleSupplier` / `chainParentChild`, `.withExtensionMargin(...)`, `.ignoreRestingOverlaps()`, `.autoGroundChassis()`, and `.withAutoInstallToAdvantageScope()`.
+A self-contained starter robot with 5 bundled `.glb` meshes (`chassis.glb`, `swerve_fork.glb`, `swerve_wheel.glb`, `elevator_carriage.glb`, `arm.glb`) demonstrating `YamsDrivetrainBridge`, `YamsMechanismBridge.fromDistanceSupplier` / `fromAngleSupplier` / `chainParentChild`, `.withExtensionMargin(...)`, `.ignoreRestingOverlaps()`, `.autoGroundChassis()`, `.addCamera(...)`, `.withAutoInstallToAdvantageScope()`, and `AdvantageScopeConfigGenerator.exportStarterLayout(...)`.
 
 ```powershell
 cd examples\commands3\arm_and_elevator_2027
@@ -22,7 +22,7 @@ cd examples\commands3\arm_and_elevator_2027
 
 ## 2. `commands3/darwin_6328_2027`
 
-A real-robot port of [FRC Team 6328 Mechanical Advantage's 2026 robot (*Darwin*)](https://github.com/Mechanical-Advantage/RobotCode2026Public) (MIT License) using YAMS 2027 (`Arm`, `Elevator`, `TalonFXWrapper`) + YACSim (`.withExtensionMargin`, `.ignoreRestingOverlaps`, `YamsMechanismBridge`, and high-poly `.glb` parsing), configured with `-Xmx256m` on the robot JVM to validate 2 GB SystemCore headroom.
+A real-robot port of [FRC Team 6328 Mechanical Advantage's 2026 robot (*Darwin*)](https://github.com/Mechanical-Advantage/RobotCode2026Public) (MIT License) using YAMS 2027 (`Arm`, `Elevator`, `TalonFXWrapper`) + YACSim (`CadRobotConfig.fromAdvantageScopeDir`, `withComponentPoseSupplier`, `.withExtensionMargin`, `.ignoreRestingOverlaps`, `.addCamera`, `exportStarterLayout`, and `YamsMechanismBridge`), configured with `-Xmx256m` on the robot JVM to validate 2 GB SystemCore headroom.
 
 1. Download 6328's `.glb` meshes and `config.json` once:
    ```powershell

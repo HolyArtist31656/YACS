@@ -21,7 +21,8 @@ https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
 
 ## Features
 
-- **Native CAD Mesh Parsing**: Parses `.glb` / `.gltf` (glTF 2.0), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
+- **AdvantageScope Import, Camera Frustums & Starter Layouts**: Import an existing `Robot_<Name>/config.json` in one line (`CadRobotConfig.fromAdvantageScopeDir`), apply CAD-tool presets (`CadCoordinateSystem.ONSHAPE_GLTF`, `SOLIDWORKS_MM`, `FUSION_360_MM`, `BLENDER_GLTF`), export camera frustums (`addCamera`), and generate a pre-wired AdvantageScope layout.
+- **Native CAD Mesh Parsing (with In-Memory Cache)**: Parses `.glb` / `.gltf` (glTF 2.0), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
 - **Direct YAMS & Commands v3 Adapters**: Wire YAMS `Arm`, `Elevator`, `Pivot`, and `SwerveDrive` mechanisms directly with `YamsCommands3Bridge`, `YamsMechanismBridge`, and `YamsDrivetrainBridge`—no hand-written `Pose3d` math required.
 - **CAD-to-YAMS Mass & MOI Estimation**: Compute WPILib `Mass` and parallel-axis `MomentOfInertia` directly from parsed CAD meshes (`YamsMechanismBridge.estimateMass` / `estimateArmMoi`) to seed YAMS physics.
 - **Multi-Primitive `.glb` Sub-OBBs & Auto-Calibrated Collisions**: Automatically derive legal FRC extension envelopes from your chassis CAD (`withExtensionMargin`), auto-ignore resting coupled-linkage OBB overlaps (`ignoreRestingOverlaps`), or configure explicit `ignoreCollisionPair(a, b)` rules and Commands v3 `CadCollisionTriggers`.
@@ -64,7 +65,7 @@ Call `cadSim.periodic()` from `robotPeriodic()` and `cadSim.simulationPeriodic()
 | [Getting Started](docs/GETTING_STARTED.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
 | [Guides](docs/GUIDES.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
-| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (27 tests) and how to run them |
+| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (32 tests) and how to run them |
 | [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and Darwin benchmarks |
 | [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027` & `darwin_6328_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |

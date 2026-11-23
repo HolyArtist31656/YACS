@@ -16,6 +16,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalDouble;
+import java.util.concurrent.ConcurrentHashMap;
 import org.wpilib.math.geometry.Translation3d;
 import yacsim.core.physics.BoundingBox3d;
 import yacsim.core.physics.CadMassProperties;
@@ -30,6 +32,22 @@ public final class MeshParser {
   private static final int GLB_JSON_CHUNK = 0x4E4F534A;
   /** Maximum per-primitive sub-OBBs retained per glTF/GLB asset to keep 50 Hz SystemCore checks fast. */
   public static final int MAX_SUB_OBBS = 64;
+
+  private record CacheKey(
+      Path absolutePath,
+      long lastModifiedMillis,
+      long fileSizeBytes,
+      double unitScale,
+      double densityKgPerM3,
+      OptionalDouble massOverrideKg,
+      int maxTriangleBudget) {}
+
+  private static final Map<CacheKey, MeshMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
+
+  /** Clears the in-memory parsed {@link MeshMetadata} cache. */
+  public static void clearCache() {
+    METADATA_CACHE.clear();
+  }
 
   private MeshParser() {}
 
@@ -47,6 +65,20 @@ public final class MeshParser {
     if (!Files.exists(path)) throw new CadMeshValidationException("CAD mesh file not found: " + path);
     MeshFormat format = MeshFormat.fromPath(path);
     long fileSize = Files.size(path);
+    long lastMod = Files.getLastModifiedTime(path).toMillis();
+    CacheKey cacheKey =
+        new CacheKey(
+            path.toAbsolutePath().normalize(),
+            lastMod,
+            fileSize,
+            config.getUnitScaleToMeters(),
+            config.getDensityKgPerM3(),
+            config.getMassOverrideKg(),
+            config.getMaxTriangleBudget());
+    MeshMetadata cached = METADATA_CACHE.get(cacheKey);
+    if (cached != null) {
+      return cached;
+    }
 
     MeshMetadata raw =
         switch (format) {
@@ -75,9 +107,12 @@ public final class MeshParser {
     if (config.getMassOverrideKg().isPresent()) {
       massProps = massProps.withTotalMassKg(config.getMassOverrideKg().getAsDouble());
     }
-    return new MeshMetadata(
-        raw.sourcePath(), raw.format(), raw.triangleCount(), raw.fileSizeBytes(),
-        raw.localBounds(), massProps, raw.collisionSubBounds());
+    MeshMetadata result =
+        new MeshMetadata(
+            raw.sourcePath(), raw.format(), raw.triangleCount(), raw.fileSizeBytes(),
+            raw.localBounds(), massProps, raw.collisionSubBounds());
+    METADATA_CACHE.put(cacheKey, result);
+    return result;
   }
 
   private static MeshMetadata parseStl(Path path, long fileSize, CadAssetConfig config) throws IOException {

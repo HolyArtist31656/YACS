@@ -4,6 +4,7 @@
 
 package yacsim.commands3;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose3d;
@@ -13,7 +14,11 @@ import yacsim.core.yams.MotionAxis;
 import yacsim.core.yams.YamsMechanismBridge;
 import yams.commands3.mechanisms.Arm;
 import yams.commands3.mechanisms.Elevator;
+import yacsim.core.cad.CadAssetConfig;
+import yacsim.core.drivetrain.CadDrivetrainConfig;
+import yacsim.core.drivetrain.YamsDrivetrainBridge;
 import yams.commands3.mechanisms.Pivot;
+import yams.commands3.swerve.SwerveDrive;
 
 /**
  * Direct WPILib Commands v3 adapters connecting YAMS 2027 mechanisms ({@link Arm}, {@link
@@ -181,5 +186,91 @@ public final class YamsCommands3Bridge {
     Objects.requireNonNull(pivot, "pivot");
     return YamsMechanismBridge.fromAngleSupplier(
         pivot::getAngle, pivotMeters, rotationAxis, inverted, zeroOffset);
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers for a multi-stage cascading YAMS {@link Elevator}.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param stageCount Number of moving stages (must be at least 1).
+   * @param baseMeters Base origin in robot-frame meters when height is zero.
+   * @param translationAxis Axis of elevator travel (typically {@link MotionAxis#Z}).
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromCascadingElevator(
+      Elevator elevator, int stageCount, Translation3d baseMeters, MotionAxis translationAxis) {
+    Objects.requireNonNull(elevator, "elevator");
+    return YamsMechanismBridge.fromCascadingElevator(
+        elevator::getHeight, stageCount, baseMeters, translationAxis);
+  }
+
+  /**
+   * Creates a level-riding 4-bar end-effector {@link Pose3d} supplier driven by a YAMS {@link Arm}.
+   *
+   * @param arm Driving YAMS {@link Arm}.
+   * @param pivotMeters Pivot point in robot-frame meters.
+   * @param armLengthMeters Positive arm length in meters.
+   * @param rotationAxis Axis of arm rotation (typically {@link MotionAxis#Y}).
+   * @return Robot-relative {@link Pose3d} supplier for the level end-effector.
+   */
+  public static Supplier<Pose3d> fromFourBar(
+      Arm arm, Translation3d pivotMeters, double armLengthMeters, MotionAxis rotationAxis) {
+    Objects.requireNonNull(arm, "arm");
+    return YamsMechanismBridge.fromFourBar(
+        arm::getAngle, pivotMeters, armLengthMeters, rotationAxis);
+  }
+
+  /**
+   * Creates a level-riding 4-bar end-effector {@link Pose3d} supplier driven by a YAMS {@link Arm}
+   * with optional angle inversion.
+   *
+   * @param arm Driving YAMS {@link Arm}.
+   * @param pivotMeters Pivot point in robot-frame meters.
+   * @param armLengthMeters Positive arm length in meters.
+   * @param rotationAxis Axis of arm rotation.
+   * @param inverted {@code true} to negate the driving angle.
+   * @return Robot-relative {@link Pose3d} supplier for the level end-effector.
+   */
+  public static Supplier<Pose3d> fromFourBar(
+      Arm arm,
+      Translation3d pivotMeters,
+      double armLengthMeters,
+      MotionAxis rotationAxis,
+      boolean inverted) {
+    Objects.requireNonNull(arm, "arm");
+    return YamsMechanismBridge.fromFourBar(
+        arm::getAngle, pivotMeters, armLengthMeters, rotationAxis, inverted);
+  }
+
+  /**
+   * Wires a YAMS Commands v3 {@link SwerveDrive} directly into a {@link CadDrivetrainConfig},
+   * automatically binding {@code getPose()}, {@code getGyroRotation3d()}, and {@code
+   * getModulePositions()}.
+   *
+   * @param drive YAMS {@link SwerveDrive} instance.
+   * @param chassisAsset Chassis CAD mesh asset.
+   * @param steerForkAsset Optional shared steer-fork CAD asset (may be {@code null}).
+   * @param wheelAsset Optional shared wheel CAD asset (may be {@code null}).
+   * @param wheelRadiusMeters Positive wheel radius in meters.
+   * @param moduleLocations Module mounting locations in chassis frame (typically FL, FR, BL, BR).
+   * @return Configured {@link CadDrivetrainConfig}.
+   */
+  public static CadDrivetrainConfig fromYamsSwerve(
+      SwerveDrive drive,
+      CadAssetConfig chassisAsset,
+      CadAssetConfig steerForkAsset,
+      CadAssetConfig wheelAsset,
+      double wheelRadiusMeters,
+      List<Translation3d> moduleLocations) {
+    Objects.requireNonNull(drive, "drive");
+    return YamsDrivetrainBridge.fromYamsSwerve(
+        chassisAsset,
+        steerForkAsset,
+        wheelAsset,
+        wheelRadiusMeters,
+        moduleLocations,
+        drive::getPose,
+        drive::getGyroRotation3d,
+        drive::getModulePositions);
   }
 }

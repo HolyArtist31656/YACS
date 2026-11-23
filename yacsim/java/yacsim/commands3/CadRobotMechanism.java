@@ -6,6 +6,8 @@ package yacsim.commands3;
 
 import java.io.IOException;
 import org.wpilib.command3.Mechanism;
+import org.wpilib.framework.RobotBase;
+import org.wpilib.system.Notifier;
 import yacsim.core.model.CadRobotConfig;
 import yacsim.core.model.CadRobotSimulator;
 
@@ -17,6 +19,7 @@ import yacsim.core.model.CadRobotSimulator;
 public class CadRobotMechanism implements AutoCloseable {
   private final Mechanism mechanism;
   private final CadRobotSimulator simulator;
+  private Notifier simNotifier = null;
 
   /**
    * Constructs a Commands v3 CAD robot mechanism and initializes a new {@link CadRobotSimulator}
@@ -58,7 +61,46 @@ public class CadRobotMechanism implements AutoCloseable {
    */
   public CadRobotSimulator getSimulator() { return simulator; }
 
-  /** Closes underlying NetworkTables publishers. */
+
+  /**
+   * Starts a managed background {@link Notifier} calling {@link #simulationPeriodic()} every {@code
+   * 0.02} seconds (50 Hz) when running in desktop simulation. Safe no-op on real robot hardware;
+   * automatically stopped and closed by {@link #close()}.
+   *
+   * @return This mechanism wrapper for chaining.
+   */
+  public CadRobotMechanism startSimNotifier() {
+    return startSimNotifier(0.02);
+  }
+
+  /**
+   * Starts a managed background {@link Notifier} calling {@link #simulationPeriodic()} at the given
+   * period when running in desktop simulation. Safe no-op on real robot hardware; automatically
+   * stopped and closed by {@link #close()}.
+   *
+   * @param periodSeconds Positive simulation period in seconds (for example {@code 0.02}).
+   * @return This mechanism wrapper for chaining.
+   */
+  public CadRobotMechanism startSimNotifier(double periodSeconds) {
+    if (periodSeconds <= 0.0) {
+      throw new IllegalArgumentException("periodSeconds must be positive.");
+    }
+    if (RobotBase.isSimulation() && simNotifier == null) {
+      simNotifier = new Notifier(this::simulationPeriodic);
+      simNotifier.setName("YACSim-SimNotifier");
+      simNotifier.startPeriodic(periodSeconds);
+    }
+    return this;
+  }
+
+  /** Stops any managed simulation {@link Notifier} and closes NetworkTables publishers. */
   @Override
-  public void close() { simulator.close(); }
+  public void close() {
+    if (simNotifier != null) {
+      simNotifier.stop();
+      simNotifier.close();
+      simNotifier = null;
+    }
+    simulator.close();
+  }
 }

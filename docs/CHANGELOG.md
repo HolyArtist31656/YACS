@@ -2,6 +2,17 @@
 
 All notable changes to YACSim are documented here.
 
+## `v2027.0.6-alpha1` — AdvantageScope Import, CAD Presets, Linkages, Swerve Adapter & Managed Sim
+
+### Added
+- **AdvantageScope Directory Importer**: `CadRobotConfig.fromAdvantageScopeDir(Path)` and `withComponentPoseSupplier(index [, newName], supplier)` import existing `Robot_<Name>/config.json` bundles in one line.
+- **CAD-Tool Coordinate Presets**: `CadCoordinateSystem` (`WPILIB_NWU`, `ONSHAPE_GLTF`, `SOLIDWORKS_MM`, `FUSION_360_MM`, `BLENDER_GLTF`) and `CadAssetConfig.withCoordinateSystem(...)`.
+- **Multi-Stage Elevators & 4-Bar Linkages**: `fromCascadingElevator(...)` and `fromFourBar(...)` on both `YamsMechanismBridge` and `YamsCommands3Bridge`.
+- **Direct YAMS `SwerveDrive` Adapter**: `YamsCommands3Bridge.fromYamsSwerve(SwerveDrive, ...)`.
+- **Managed Sim `Notifier` & `MeshParser` Cache**: `CadRobotMechanism.startSimNotifier([periodSeconds])` and thread-safe `MeshParser` metadata caching (`MeshParser.clearCache()`).
+- **Camera Frustums & Starter Layouts**: `CadCameraConfig`, `CadRobotConfig.addCamera(...)`, `AdvantageScopeConfigGenerator.buildStarterLayoutJson(...)`, and `exportStarterLayout(...)`.
+- **Tests**: Expanded JUnit 5 suite from 27 to 32 tests across all 8 test classes.
+
 ## `v2027.0.5-alpha1` — CAD-to-YAMS Physics, Multi-Primitive Sub-OBBs & AdvantageScope Auto-Sync
 
 ### Added

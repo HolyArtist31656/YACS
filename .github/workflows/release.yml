@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 2027.0.5-alpha1)'
+        description: 'Release version (e.g. 2027.0.6-alpha1)'
         required: false
-        default: '2027.0.5-alpha1'
+        default: '2027.0.6-alpha1'
 
 permissions:
   contents: read

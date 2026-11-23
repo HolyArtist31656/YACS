@@ -79,7 +79,7 @@ public class RobotCadSim implements Mechanism {
                         YamsCommands3Bridge.fromYamsArm(
                             arm, new Translation3d(0.2, 0.0, 0.45), MotionAxis.Y)));
 
-    this.cadSim = new CadRobotMechanism(this, config);
+    this.cadSim = new CadRobotMechanism(this, config).startSimNotifier(0.02);
   }
 
   public void periodic() {
@@ -92,7 +92,7 @@ public class RobotCadSim implements Mechanism {
 }
 ```
 
-3. Instantiate `RobotCadSim` in your `Robot()` constructor (WPILib 2027 removed `robotInit()`), call `cadSim.periodic()` inside `robotPeriodic()`, and step `cadSim.simulationPeriodic()` inside `simulationPeriodic()` (or a `Notifier`).
+3. Instantiate `RobotCadSim` in your `Robot()` constructor (WPILib 2027 removed `robotInit()`) and call `cadSim.periodic()` inside `robotPeriodic()`. Calling `.startSimNotifier(0.02)` automatically runs `simulationPeriodic()` on a background `Notifier` in desktop simulation (and is a safe no-op on real hardware).
 
 ## Running Desktop Simulation
 

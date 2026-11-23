@@ -9,7 +9,7 @@ plugins {
 
 ext.wpilibVersion = "2027.0.0-alpha-7"
 ext.releasePath = "$buildDir/maven"
-ext.pubVersion = System.getenv("releaseVersion") ?: System.getenv("releaseName") ?: "2027.0.5-alpha1"
+ext.pubVersion = System.getenv("releaseVersion") ?: System.getenv("releaseName") ?: "2027.0.6-alpha1"
 
 repositories {
     mavenCentral()

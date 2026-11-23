@@ -21,7 +21,8 @@ Commands v3 lifecycle wrapper around `CadRobotSimulator` (`implements AutoClosea
 | `void simulationPeriodic()` | Steps suppliers and OBB collision checks (`simIterate()`). Thread-safe to call from a `Notifier`. |
 | `Mechanism getMechanism()` | Returns the owning Commands v3 `Mechanism`. |
 | `CadRobotSimulator getSimulator()` | Returns the underlying `CadRobotSimulator`. |
-| `void close()` | Closes NetworkTables publishers. |
+| `CadRobotMechanism startSimNotifier()` / `startSimNotifier(double periodSeconds)` | Starts a managed background `Notifier` in desktop simulation (safe no-op on real hardware; auto-closed on `close()`). |
+| `void close()` | Stops any managed sim `Notifier` and closes NetworkTables publishers. |
 
 ### `YamsCommands3Bridge`
 Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pose3d>` without hand-written pose math.
@@ -31,6 +32,9 @@ Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pos
 | `static Supplier<Pose3d> fromYamsArm(Arm arm, Translation3d pivot, MotionAxis axis [, boolean inverted [, Transform3d zeroOffset]])` | Reads `arm.getAngle()` and rotates around `pivot` along `axis`. |
 | `static Supplier<Pose3d> fromYamsElevator(Elevator elevator, Translation3d base, MotionAxis axis [, boolean inverted [, Transform3d zeroOffset]])` | Reads `elevator.getHeight()` and translates from `base` along `axis`. |
 | `static Supplier<Pose3d> fromYamsPivot(Pivot pivot, Translation3d pivotPos, MotionAxis axis [, boolean inverted [, Transform3d zeroOffset]])` | Reads `pivot.getAngle()` and rotates around `pivotPos` along `axis`. |
+| `static List<Supplier<Pose3d>> fromCascadingElevator(Elevator elevator, int stageCount, Translation3d base, MotionAxis axis)` | Builds proportional per-stage `Pose3d` suppliers (`1/N .. N/N`). |
+| `static Supplier<Pose3d> fromFourBar(Arm arm, Translation3d pivot, double armLengthMeters, MotionAxis axis [, boolean inverted])` | Keeps a 4-bar end-effector level while following the arm's circular arc. |
+| `static CadDrivetrainConfig fromYamsSwerve(SwerveDrive drive, ...)` | Binds `drive::getPose`, `drive::getGyroRotation3d`, and `drive::getModulePositions` directly. |
 
 ### `CadCollisionTriggers`
 Factory methods returning WPILib Commands v3 `Trigger` instances.
@@ -51,6 +55,9 @@ Fluent builder defining a simulated robot's chassis, articulated components, col
 | Method | Default / Notes |
 | --- | --- |
 | `CadRobotConfig(String robotName)` | Required; used for AdvantageScope `Robot_<robotName>` export. |
+| `static CadRobotConfig fromAdvantageScopeDir(Path robotAssetDir)` | Imports an existing AdvantageScope `Robot_<Name>` directory (`config.json`, `model*.glb`, rotations, positions, cameras). |
+| `withComponentPoseSupplier(int index [, String newName], Supplier<Pose3d>)` | Binds (and optionally renames) a component loaded via `fromAdvantageScopeDir`. |
+| `addCamera(CadCameraConfig)` / `addCamera(name, Transform3d, fovDeg, w, h)` | Registers a 3D vision camera frustum for AdvantageScope `config.json`. |
 | `withDrivetrain(CadDrivetrainConfig cfg)` | Registers chassis asset, field pose supplier, and all swerve/wheel components. |
 | `withChassisAsset(CadAssetConfig asset)` | Sets chassis CAD asset directly (when not using `CadDrivetrainConfig`). |
 | `addComponent(CadComponentConfig comp)` | Adds an articulated mechanism component in AdvantageScope `model_N` order. |
@@ -111,10 +118,11 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `withZeroedPosition(Translation3d pos)` | AdvantageScope `position` offset in meters. |
 | `addZeroedRotation(String axis, double degrees)` | Appends an ordered `"x"`, `"y"`, or `"z"` rotation to AdvantageScope's `rotations` array. |
 | `withZeroedRotation(Rotation3d rot)` | Fallback Euler zeroed rotation when `addZeroedRotation` is not used. |
+| `withCoordinateSystem(CadCoordinateSystem preset)` | Applies unit scale + ordered rotations (`WPILIB_NWU`, `ONSHAPE_GLTF`, `SOLIDWORKS_MM`, `FUSION_360_MM`, `BLENDER_GLTF`). |
 | `withMaxTriangleBudget(int maxTriangles)` | Raises/lowers triangle validation threshold. |
 
 ### `MeshParser`, `MeshMetadata`, `MeshFormat`, `CadMeshValidationException`
-- `MeshParser.parse(CadAssetConfig)` returns `MeshMetadata(sourcePath, format, triangleCount, fileSizeBytes, localBounds, massProperties, collisionSubBounds)` (retaining up to `MeshParser.MAX_SUB_OBBS = 64` per-primitive sub-OBBs for `.glb`/`.gltf`).
+- `MeshParser.parse(CadAssetConfig)` returns cached `MeshMetadata(sourcePath, format, triangleCount, fileSizeBytes, localBounds, massProperties, collisionSubBounds)` (with `MeshParser.clearCache()` and `MAX_SUB_OBBS = 64`).
 - `MeshFormat`: `GLB`, `GLTF`, `OBJ`, `STL` (`MeshFormat.fromPath(Path)`).
 - `CadMeshValidationException`: Thrown on missing files, unsupported formats, corrupt headers, or `.obj`/`.stl` files exceeding `maxTriangleBudget`.
 
@@ -141,6 +149,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 
 ## `yacsim.core.advantagescope` & `yacsim.core.util`
 
-- **`AdvantageScopeConfigGenerator`**: `buildConfigJson(...)`, `exportAssetBundle(...)`, `resolveDefaultUserAssetsDir()`, and `installToAdvantageScope(...)`.
+- **`AdvantageScopeConfigGenerator`**: `buildConfigJson(...)`, `exportAssetBundle(...)`, `resolveDefaultUserAssetsDir()`, `installToAdvantageScope(...)`, `buildStarterLayoutJson(...)`, and `exportStarterLayout(...)`.
+- **`CadCameraConfig`**: Immutable camera frustum record `(name, robotToCamera, fovDegrees, resolutionWidthPx, resolutionHeightPx)`.
 - **`AdvantageScopePublisher`**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, and `CollisionDetails` under the configured NetworkTables root table (default `/YACSim`).
 - **`MinimalJson`**: Zero-dependency recursive-descent JSON parser (`parse(String)`) and pretty-printer (`toPrettyJson(Object)`).

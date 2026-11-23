@@ -4,18 +4,28 @@
 
 package yacsim.core.model;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose2d;
+import org.wpilib.math.geometry.Pose3d;
+import org.wpilib.math.geometry.Rotation3d;
+import org.wpilib.math.geometry.Transform3d;
+import org.wpilib.math.geometry.Translation3d;
+import yacsim.core.advantagescope.CadCameraConfig;
 import yacsim.core.cad.CadAssetConfig;
+import yacsim.core.util.MinimalJson;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.physics.BoundingBox3d;
 
@@ -28,6 +38,7 @@ public final class CadRobotConfig {
   private CadDrivetrainConfig drivetrainConfig = null;
   private CadAssetConfig chassisAsset = null;
   private final List<CadComponentConfig> components = new ArrayList<>();
+  private final List<CadCameraConfig> cameras = new ArrayList<>();
   private final Set<String> ignoredCollisionPairs = new LinkedHashSet<>();
   private Supplier<Pose2d> drivetrainPoseSupplier = () -> new Pose2d();
   private String telemetryTable = "YACSim";
@@ -280,6 +291,192 @@ public final class CadRobotConfig {
     return this;
   }
 
+
+  /**
+   * Loads an existing AdvantageScope {@code Robot_<Name>} directory containing {@code config.json},
+   * {@code model.glb}, and {@code model_0.glb..model_N.glb}, preserving robot name, ordered zeroed
+   * rotations, zeroed positions, and camera definitions. Attach pose suppliers afterward via {@link
+   * #withComponentPoseSupplier(int, String, Supplier)}.
+   *
+   * @param robotAssetDir Path to an existing AdvantageScope {@code Robot_<Name>} directory.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If {@code config.json} cannot be read.
+   */
+  @SuppressWarnings("unchecked")
+  public static CadRobotConfig fromAdvantageScopeDir(Path robotAssetDir) throws IOException {
+    Objects.requireNonNull(robotAssetDir, "robotAssetDir");
+    Path configFile = robotAssetDir.resolve("config.json");
+    Map<String, Object> root =
+        (Map<String, Object>) MinimalJson.parse(Files.readString(configFile, StandardCharsets.UTF_8));
+    String name =
+        root.get("name") instanceof String s && !s.isBlank()
+            ? s
+            : robotAssetDir.getFileName().toString().replaceFirst("^Robot_", "");
+    CadRobotConfig cfg = new CadRobotConfig(name);
+    if (root.get("disableSimplification") instanceof Boolean b) {
+      cfg.withDisableAdvantageScopeSimplification(b);
+    }
+
+    Path chassisPath = robotAssetDir.resolve("model.glb");
+    if (Files.exists(chassisPath)) {
+      CadAssetConfig chassis = new CadAssetConfig(chassisPath);
+      applyZeroedTransform(
+          chassis,
+          (List<Object>) root.get("position"),
+          (List<Object>) root.get("rotations"));
+      cfg.withChassisAsset(chassis);
+    }
+
+    List<Object> compList = (List<Object>) root.get("components");
+    if (compList != null) {
+      for (int i = 0; i < compList.size(); i++) {
+        Map<String, Object> compObj = (Map<String, Object>) compList.get(i);
+        Path compMesh = robotAssetDir.resolve("model_" + i + ".glb");
+        CadAssetConfig compAsset = new CadAssetConfig(compMesh);
+        applyZeroedTransform(
+            compAsset,
+            (List<Object>) compObj.get("zeroedPosition"),
+            (List<Object>) compObj.get("zeroedRotations"));
+        cfg.addComponent(
+            new CadComponentConfig("Component_" + i, compAsset).withParentComponent("Chassis"));
+      }
+    }
+
+    List<Object> camList = (List<Object>) root.get("cameras");
+    if (camList != null) {
+      for (Object camObj : camList) {
+        Map<String, Object> c = (Map<String, Object>) camObj;
+        String camName = c.get("name") instanceof String s ? s : "Camera";
+        List<Object> pos = (List<Object>) c.get("position");
+        List<Object> rots = (List<Object>) c.get("rotations");
+        List<Object> res = (List<Object>) c.get("resolution");
+        double fov = c.get("fov") instanceof Number n ? n.doubleValue() : 70.0;
+        int w = (res != null && res.size() >= 2) ? ((Number) res.get(0)).intValue() : 1280;
+        int h = (res != null && res.size() >= 2) ? ((Number) res.get(1)).intValue() : 720;
+        Translation3d t = parseTranslation(pos);
+        Rotation3d r = parseRotation(rots);
+        cfg.addCamera(new CadCameraConfig(camName, new Transform3d(t, r), fov, w, h));
+      }
+    }
+    return cfg;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void applyZeroedTransform(
+      CadAssetConfig asset, List<Object> posList, List<Object> rotList) {
+    if (posList != null && posList.size() >= 3) {
+      asset.withZeroedPosition(parseTranslation(posList));
+    }
+    if (rotList != null) {
+      for (Object obj : rotList) {
+        Map<String, Object> rot = (Map<String, Object>) obj;
+        String axis = String.valueOf(rot.get("axis"));
+        double deg = ((Number) rot.get("degrees")).doubleValue();
+        asset.addZeroedRotation(axis, deg);
+      }
+    }
+  }
+
+  private static Translation3d parseTranslation(List<Object> pos) {
+    if (pos == null || pos.size() < 3) {
+      return new Translation3d();
+    }
+    return new Translation3d(
+        ((Number) pos.get(0)).doubleValue(),
+        ((Number) pos.get(1)).doubleValue(),
+        ((Number) pos.get(2)).doubleValue());
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Rotation3d parseRotation(List<Object> rotList) {
+    Rotation3d rot = new Rotation3d();
+    if (rotList == null) {
+      return rot;
+    }
+    for (Object obj : rotList) {
+      Map<String, Object> r = (Map<String, Object>) obj;
+      String axis = String.valueOf(r.get("axis")).toLowerCase();
+      double rad = Math.toRadians(((Number) r.get("degrees")).doubleValue());
+      Rotation3d step =
+          switch (axis) {
+            case "x" -> new Rotation3d(rad, 0.0, 0.0);
+            case "y" -> new Rotation3d(0.0, rad, 0.0);
+            case "z" -> new Rotation3d(0.0, 0.0, rad);
+            default -> new Rotation3d();
+          };
+      rot = rot.rotateBy(step);
+    }
+    return rot;
+  }
+
+  /**
+   * Binds a {@link Pose3d} supplier to an existing component by 0-based index (especially useful
+   * after {@link #fromAdvantageScopeDir(Path)}).
+   *
+   * @param index 0-based index in {@link #getComponents()}.
+   * @param poseSupplier Pose supplier for the component.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withComponentPoseSupplier(int index, Supplier<Pose3d> poseSupplier) {
+    Objects.requireNonNull(poseSupplier, "poseSupplier");
+    components.get(index).withPoseSupplier(poseSupplier);
+    return this;
+  }
+
+  /**
+   * Renames and binds a {@link Pose3d} supplier to an existing component by 0-based index (useful
+   * after {@link #fromAdvantageScopeDir(Path)} so collision details use meaningful mechanism names).
+   *
+   * @param index 0-based index in {@link #getComponents()}.
+   * @param newName New component name (for example {@code "Hood"}).
+   * @param poseSupplier Pose supplier for the component.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withComponentPoseSupplier(
+      int index, String newName, Supplier<Pose3d> poseSupplier) {
+    Objects.requireNonNull(newName, "newName");
+    Objects.requireNonNull(poseSupplier, "poseSupplier");
+    CadComponentConfig prev = components.get(index);
+    CadComponentConfig replacement =
+        new CadComponentConfig(newName, prev.getAssetConfig())
+            .withCollisionEnabled(prev.isCollisionEnabled())
+            .withPoseSupplier(poseSupplier);
+    prev.getParentComponentName().ifPresent(replacement::withParentComponent);
+    components.set(index, replacement);
+    return this;
+  }
+
+  /**
+   * Registers an AdvantageScope 3D vision camera frustum exported into {@code config.json}.
+   *
+   * @param camera Camera frustum configuration.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig addCamera(CadCameraConfig camera) {
+    this.cameras.add(Objects.requireNonNull(camera, "camera"));
+    return this;
+  }
+
+  /**
+   * Convenience overload registering an AdvantageScope 3D vision camera frustum.
+   *
+   * @param name Camera name.
+   * @param robotToCamera Robot-to-camera {@link Transform3d}.
+   * @param fovDegrees Horizontal FOV in degrees.
+   * @param resolutionWidthPx Width in pixels.
+   * @param resolutionHeightPx Height in pixels.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig addCamera(
+      String name,
+      Transform3d robotToCamera,
+      double fovDegrees,
+      int resolutionWidthPx,
+      int resolutionHeightPx) {
+    return addCamera(
+        new CadCameraConfig(name, robotToCamera, fovDegrees, resolutionWidthPx, resolutionHeightPx));
+  }
+
   /** @return Configured robot name. */
   public String getRobotName() {
     return robotName;
@@ -363,5 +560,10 @@ public final class CadRobotConfig {
   /** @return {@code true} if automatic chassis Z-grounding is enabled. */
   public boolean isAutoGroundChassisEnabled() {
     return autoGroundChassis;
+  }
+
+  /** @return Unmodifiable list of configured AdvantageScope cameras. */
+  public List<CadCameraConfig> getCameras() {
+    return Collections.unmodifiableList(cameras);
   }
 }

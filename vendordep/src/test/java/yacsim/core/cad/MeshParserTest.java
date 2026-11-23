@@ -5,6 +5,7 @@
 package yacsim.core.cad;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.io.IOException;
@@ -165,6 +166,32 @@ class MeshParserTest {
     assertEquals(2, meta.collisionSubBounds().size());
     assertEquals(1.0, meta.localBounds().maxX(), 1e-6);
     assertEquals(1.0, meta.localBounds().maxZ(), 1e-6);
+  }
+
+  @Test
+  void appliesCadCoordinateSystemPresetAndCachesRepeatedParses(@TempDir Path tempDir)
+      throws IOException {
+    MeshParser.clearCache();
+    Path obj = tempDir.resolve("sw_plate.obj");
+    String content =
+        """
+        v 0 0 0
+        v 1000 0 0
+        v 1000 500 0
+        v 0 500 0
+        f 1 2 3 4
+        """;
+    Files.writeString(obj, content, StandardCharsets.UTF_8);
+
+    CadAssetConfig cfg =
+        new CadAssetConfig(obj).withCoordinateSystem(CadCoordinateSystem.SOLIDWORKS_MM);
+    assertEquals(0.001, cfg.getUnitScaleToMeters(), 1e-9);
+    assertEquals(2, cfg.getOrderedZeroedRotations().size());
+
+    MeshMetadata first = MeshParser.parse(cfg);
+    MeshMetadata second = MeshParser.parse(cfg);
+    assertSame(first, second);
+    assertEquals(1.0, first.localBounds().sizeX(), 1e-6);
   }
 
   private static byte[] padTo4Bytes(byte[] raw) {

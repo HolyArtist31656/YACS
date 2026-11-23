@@ -148,6 +148,24 @@ public final class CadAssetConfig {
    * @param maxTriangles Positive triangle count limit.
    * @return This config for chaining.
    */
+
+  /**
+   * Applies a standard CAD export preset (unit scale plus ordered AdvantageScope zeroed rotations)
+   * so the mesh aligns with WPILib's NWU coordinate frame on the first run.
+   *
+   * @param preset CAD tool coordinate-system preset.
+   * @return This config for chaining.
+   */
+  public CadAssetConfig withCoordinateSystem(CadCoordinateSystem preset) {
+    if (preset == null) {
+      throw new IllegalArgumentException("preset cannot be null.");
+    }
+    this.unitScaleToMeters = preset.getUnitScaleToMeters();
+    this.orderedZeroedRotations.clear();
+    this.orderedZeroedRotations.addAll(preset.getZeroedRotations());
+    return this;
+  }
+
   public CadAssetConfig withMaxTriangleBudget(int maxTriangles) {
     if (maxTriangles <= 0) throw new IllegalArgumentException("maxTriangles must be positive.");
     this.maxTriangleBudget = maxTriangles;

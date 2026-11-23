@@ -15,7 +15,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation3d;
+import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import yacsim.core.cad.CadAssetConfig;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
@@ -120,5 +122,72 @@ class AdvantageScopeConfigGeneratorTest {
             MinimalJson.parse(AdvantageScopeConfigGenerator.buildConfigJson(robot, 0.05));
     List<Number> pos = (List<Number>) json.get("position");
     assertEquals(0.07, pos.get(2).doubleValue(), 1e-6);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void exportsCamerasAndStarterLayoutJson(@TempDir Path tempDir) throws IOException {
+    CadRobotConfig robot =
+        new CadRobotConfig("VisionBot")
+            .withTelemetryTable("YACSim")
+            .addCamera(
+                "FrontCam",
+                new Transform3d(
+                    new Translation3d(0.25, 0.1, 0.5), new Rotation3d(0, Math.toRadians(-15), 0)),
+                70.0,
+                1280,
+                800);
+
+    Map<String, Object> configJson =
+        (Map<String, Object>)
+            MinimalJson.parse(AdvantageScopeConfigGenerator.buildConfigJson(robot));
+    List<Map<String, Object>> cams = (List<Map<String, Object>>) configJson.get("cameras");
+    assertEquals(1, cams.size());
+    assertEquals("FrontCam", cams.get(0).get("name"));
+    assertEquals(70.0, ((Number) cams.get(0).get("fov")).doubleValue(), 1e-6);
+
+    Path layoutFile =
+        AdvantageScopeConfigGenerator.exportStarterLayout(robot, tempDir.resolve("layout.json"));
+    assertTrue(Files.exists(layoutFile));
+    Map<String, Object> layout =
+        (Map<String, Object>) MinimalJson.parse(Files.readString(layoutFile));
+    assertEquals(2, ((List<Object>) layout.get("tabs")).size());
+  }
+
+  @Test
+  void importsExistingAdvantageScopeDirectoryAndBindsPoseSuppliers(@TempDir Path tempDir)
+      throws IOException {
+    Path robotDir = tempDir.resolve("Robot_ImportTest");
+    Files.createDirectories(robotDir);
+    Files.writeString(robotDir.resolve("model.glb"), "placeholder");
+    Files.writeString(robotDir.resolve("model_0.glb"), "placeholder");
+    String configJson =
+        """
+        {
+          "name": "ImportTest",
+          "disableSimplification": true,
+          "rotations": [{"axis": "x", "degrees": 90}, {"axis": "z", "degrees": 90}],
+          "position": [0.0, 0.0, 0.05],
+          "cameras": [{"name": "Limelight", "position": [0.2, 0.0, 0.4], "rotations": [], "resolution": [1280, 960], "fov": 62.5}],
+          "components": [
+            {"zeroedRotations": [{"axis": "y", "degrees": 45}], "zeroedPosition": [0.1, 0.0, 0.2]}
+          ]
+        }
+        """;
+    Files.writeString(robotDir.resolve("config.json"), configJson);
+
+    Pose3d expectedPose = new Pose3d(0.1, 0.0, 0.5, new Rotation3d());
+    CadRobotConfig imported =
+        CadRobotConfig.fromAdvantageScopeDir(robotDir)
+            .withComponentPoseSupplier(0, "Hood", () -> expectedPose);
+
+    assertEquals("ImportTest", imported.getRobotName());
+    assertTrue(imported.isDisableAdvantageScopeSimplification());
+    assertEquals(2, imported.getChassisAsset().orElseThrow().getOrderedZeroedRotations().size());
+    assertEquals(1, imported.getCameras().size());
+    assertEquals("Limelight", imported.getCameras().get(0).name());
+    assertEquals(1, imported.getComponents().size());
+    assertEquals("Hood", imported.getComponents().get(0).getName());
+    assertEquals(0.5, imported.getComponents().get(0).getPoseSupplier().get().getZ(), 1e-6);
   }
 }

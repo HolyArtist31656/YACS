@@ -7,6 +7,9 @@ package yacsim.core.yams;
 import static org.wpilib.units.Units.Meters;
 import static org.wpilib.units.Units.Radians;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose3d;
@@ -228,5 +231,92 @@ public final class YamsMechanismBridge {
       MeshMetadata metadata, Translation3d pivotMeters, MotionAxis rotationAxis) {
     Objects.requireNonNull(metadata, "metadata");
     return metadata.massProperties().momentOfInertiaAboutPivot(pivotMeters, rotationAxis);
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers for a multi-stage cascading elevator where stage
+   * {@code k} ({@code 1..stageCount}) travels {@code (k / stageCount)} of total elevator height.
+   *
+   * @param totalHeightSupplier Supplier returning total carriage height as a {@link Distance}.
+   * @param stageCount Number of moving stages (must be at least 1).
+   * @param baseMeters Base origin in robot-frame meters when height is zero.
+   * @param translationAxis Axis of linear travel (typically {@link MotionAxis#Z}).
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers from stage 1 to carriage.
+   */
+  public static List<Supplier<Pose3d>> fromCascadingElevator(
+      Supplier<Distance> totalHeightSupplier,
+      int stageCount,
+      Translation3d baseMeters,
+      MotionAxis translationAxis) {
+    Objects.requireNonNull(totalHeightSupplier, "totalHeightSupplier");
+    Objects.requireNonNull(baseMeters, "baseMeters");
+    Objects.requireNonNull(translationAxis, "translationAxis");
+    if (stageCount < 1) {
+      throw new IllegalArgumentException("stageCount must be at least 1.");
+    }
+    List<Supplier<Pose3d>> stages = new ArrayList<>(stageCount);
+    for (int i = 1; i <= stageCount; i++) {
+      final double fraction = (double) i / stageCount;
+      stages.add(
+          () -> {
+            Distance d = totalHeightSupplier.get();
+            double meters = d != null ? d.in(Meters) * fraction : 0.0;
+            return new Pose3d(
+                baseMeters.plus(translationAxis.toTranslation3d(meters)), new Rotation3d());
+          });
+    }
+    return Collections.unmodifiableList(stages);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a level-riding 4-bar linkage end-effector that translates
+   * along a circular arc of radius {@code armLengthMeters} around {@code pivotMeters} while keeping
+   * zero rotation in the robot frame.
+   *
+   * @param armAngleSupplier Supplier returning the driving arm {@link Angle}.
+   * @param pivotMeters Pivot location in robot-frame meters.
+   * @param armLengthMeters Positive linkage arm length in meters.
+   * @param rotationAxis Axis of arm rotation (typically {@link MotionAxis#Y} for XZ-plane arms).
+   * @return Robot-relative {@link Pose3d} supplier for the level end-effector.
+   */
+  public static Supplier<Pose3d> fromFourBar(
+      Supplier<Angle> armAngleSupplier,
+      Translation3d pivotMeters,
+      double armLengthMeters,
+      MotionAxis rotationAxis) {
+    return fromFourBar(armAngleSupplier, pivotMeters, armLengthMeters, rotationAxis, false);
+  }
+
+  /**
+   * Builds a {@link Pose3d} supplier for a level-riding 4-bar linkage end-effector with optional
+   * angle inversion.
+   *
+   * @param armAngleSupplier Supplier returning the driving arm {@link Angle}.
+   * @param pivotMeters Pivot location in robot-frame meters.
+   * @param armLengthMeters Positive linkage arm length in meters.
+   * @param rotationAxis Axis of arm rotation.
+   * @param inverted {@code true} to negate the driving angle.
+   * @return Robot-relative {@link Pose3d} supplier for the level end-effector.
+   */
+  public static Supplier<Pose3d> fromFourBar(
+      Supplier<Angle> armAngleSupplier,
+      Translation3d pivotMeters,
+      double armLengthMeters,
+      MotionAxis rotationAxis,
+      boolean inverted) {
+    Objects.requireNonNull(armAngleSupplier, "armAngleSupplier");
+    Objects.requireNonNull(pivotMeters, "pivotMeters");
+    Objects.requireNonNull(rotationAxis, "rotationAxis");
+    if (armLengthMeters <= 0.0) {
+      throw new IllegalArgumentException("armLengthMeters must be positive.");
+    }
+    double sign = inverted ? -1.0 : 1.0;
+    return () -> {
+      Angle angle = armAngleSupplier.get();
+      double rad = angle != null ? sign * angle.in(Radians) : 0.0;
+      Translation3d armTipOffset =
+          new Translation3d(armLengthMeters, 0.0, 0.0).rotateBy(rotationAxis.toRotation3d(rad));
+      return new Pose3d(pivotMeters.plus(armTipOffset), new Rotation3d());
+    };
   }
 }

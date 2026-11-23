@@ -107,7 +107,17 @@ public final class AdvantageScopeConfigGenerator {
       root.put("rotations", List.of());
       root.put("position", positionList(new Translation3d(0.0, 0.0, chassisGroundOffsetZ)));
     }
-    root.put("cameras", List.of());
+    List<Object> cameraList = new ArrayList<>();
+    for (CadCameraConfig cam : robotConfig.getCameras()) {
+      Map<String, Object> camObj = new LinkedHashMap<>();
+      camObj.put("name", cam.name());
+      camObj.put("rotations", rotationList(cam.robotToCamera().getRotation()));
+      camObj.put("position", positionList(cam.robotToCamera().getTranslation()));
+      camObj.put("resolution", List.of(cam.resolutionWidthPx(), cam.resolutionHeightPx()));
+      camObj.put("fov", cam.fovDegrees());
+      cameraList.add(camObj);
+    }
+    root.put("cameras", cameraList);
     List<Object> components = new ArrayList<>();
     for (CadComponentConfig comp : robotConfig.getAllArticulatedComponents()) {
       Map<String, Object> compObj = new LinkedHashMap<>();
@@ -209,6 +219,54 @@ public final class AdvantageScopeConfigGenerator {
     Path installed = exportAssetBundle(robotConfig, userAssetsDir.get(), chassisGroundOffsetZ);
     System.out.println("[YACSim] Installed AdvantageScope asset bundle: " + installed);
     return Optional.of(installed);
+  }
+
+
+  /**
+   * Builds a starter AdvantageScope layout JSON pre-binding {@code RobotPose3d}, {@code
+   * ComponentPoses}, {@code CollisionActive}, and {@code CollisionDetails} under the configured
+   * telemetry table.
+   *
+   * @param robotConfig Robot CAD configuration.
+   * @return Pretty-printed layout JSON string.
+   */
+  public static String buildStarterLayoutJson(CadRobotConfig robotConfig) {
+    String prefix = "NT:/" + robotConfig.getTelemetryTable() + "/";
+    Map<String, Object> fieldTab = new LinkedHashMap<>();
+    fieldTab.put("type", 4);
+    fieldTab.put("title", "YACSim 3D Field");
+    Map<String, Object> fieldConfig = new LinkedHashMap<>();
+    fieldConfig.put("robot", robotConfig.getRobotName());
+    fieldConfig.put("robotPose3dTopic", prefix + "RobotPose3d");
+    fieldConfig.put("componentPosesTopic", prefix + "ComponentPoses");
+    fieldTab.put("config", fieldConfig);
+
+    Map<String, Object> collisionTab = new LinkedHashMap<>();
+    collisionTab.put("type", 2);
+    collisionTab.put("title", "YACSim Collisions");
+    collisionTab.put("topics", List.of(prefix + "CollisionActive", prefix + "CollisionDetails"));
+
+    Map<String, Object> layout = new LinkedHashMap<>();
+    layout.put("version", "4.0.0");
+    layout.put("tabs", List.of(fieldTab, collisionTab));
+    return MinimalJson.toPrettyJson(layout);
+  }
+
+  /**
+   * Writes a starter AdvantageScope layout JSON file pre-wired to this robot's YACSim NT4 topics.
+   *
+   * @param robotConfig Robot CAD configuration.
+   * @param outputFile Destination {@code .json} layout path.
+   * @return Path to the written layout file.
+   * @throws IOException If writing the layout file fails.
+   */
+  public static Path exportStarterLayout(CadRobotConfig robotConfig, Path outputFile)
+      throws IOException {
+    if (outputFile.getParent() != null) {
+      Files.createDirectories(outputFile.getParent());
+    }
+    Files.writeString(outputFile, buildStarterLayoutJson(robotConfig), StandardCharsets.UTF_8);
+    return outputFile;
   }
 
   private static List<Object> rotationList(CadAssetConfig asset) {

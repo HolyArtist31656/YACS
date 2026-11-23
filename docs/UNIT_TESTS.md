@@ -1,6 +1,6 @@
 # Unit Tests
 
-YACSim includes **8 JUnit 5 test classes (27 tests)** under `vendordep/src/test/java/yacsim/`. All tests run headless on desktop without requiring a roboRIO or SystemCore.
+YACSim includes **8 JUnit 5 test classes (32 tests)** under `vendordep/src/test/java/yacsim/`. All tests run headless on desktop without requiring a roboRIO or SystemCore.
 
 ## Running Tests
 
@@ -22,10 +22,10 @@ cd vendordep
 | Test Class | Package | Tests | What It Verifies |
 | --- | --- | --- | --- |
 | `CadRobotMechanismTest` | `yacsim.commands3` | 1 | `mechanismStepsSimulatorSafely()` — Instantiates `CadRobotMechanism` with a Commands v3 `Mechanism`, steps `simulationPeriodic()` and `periodic()` cleanly, and verifies lifecycle cleanup. |
-| `AdvantageScopeConfigGeneratorTest` | `yacsim.core.advantagescope` | 4 | `generatesValidAdvantageScopeJsonWithDrivetrainAndMechanisms`, `emitsOrderedMultiAxisRotationsInExactSequence`, `resolvesDefaultAdvantageScopeUserAssetsDir`, and `appliesChassisGroundOffsetToConfigJson`. |
-| `MeshParserTest` | `yacsim.core.cad` | 6 | `parsesGlb2HeaderWithoutLoadingGpuBuffers`, `allowsHighPolyGlbWithWarningWithoutCrashing`, `extractsPerPrimitiveSubBoundsForLShapedGlb`, `parsesObjWithMillimeterScale`, `parsesAsciiStlUnitCube`, and `rejectsMeshExceedingTriangleBudget`. |
+| `AdvantageScopeConfigGeneratorTest` | `yacsim.core.advantagescope` | 6 | `generatesValidAdvantageScopeJsonWithDrivetrainAndMechanisms`, `emitsOrderedMultiAxisRotationsInExactSequence`, `resolvesDefaultAdvantageScopeUserAssetsDir`, `appliesChassisGroundOffsetToConfigJson`, `exportsCamerasAndStarterLayoutJson`, and `importsExistingAdvantageScopeDirectoryAndBindsPoseSuppliers`. |
+| `MeshParserTest` | `yacsim.core.cad` | 7 | `parsesGlb2HeaderWithoutLoadingGpuBuffers`, `allowsHighPolyGlbWithWarningWithoutCrashing`, `extractsPerPrimitiveSubBoundsForLShapedGlb`, `parsesObjWithMillimeterScale`, `parsesAsciiStlUnitCube`, `rejectsMeshExceedingTriangleBudget`, and `appliesCadCoordinateSystemPresetAndCachesRepeatedParses`. |
 | `CadDrivetrainTest` | `yacsim.core.drivetrain` | 1 | `simulatesYamsSwerveDrivetrainAndChassisCollision` — Wires `YamsDrivetrainBridge.fromYamsSwerve` (4 steer forks + 4 wheels + 1 arm = 9 articulated poses), verifies gyro pitch/roll in `RobotPose3d`, and asserts `Arm <-> Chassis` collision detection. |
 | `CadRobotSimulatorTest` | `yacsim.core.model` | 6 | `ignoresConfiguredCollisionPairsSymmetrically`, `ignoresExtensionEnvelopeForConfiguredComponentOnly`, `autoDerivesExtensionEnvelopeFromChassisBounds`, `autoIgnoresRestingSiblingOverlapsWhileDetectingNewDynamicCollisions`, `ignoreRestingOverlapsDoesNotSilenceExtensionEnvelopeViolations`, and `autoGroundsChassisAndUsesMultiPrimitiveSubObbs`. |
 | `ObbCollisionDetectorTest` | `yacsim.core.physics` | 4 | `detectsSeparatedBoxes`, `detectsOverlappingRotatedBoxes`, `detectsExtensionEnvelopeViolation`, and `multiObbEliminatesFalsePositiveInsideLShapedCavity`. |
 | `MinimalJsonTest` | `yacsim.core.util` | 1 | `roundTripsNestedJsonCleanly` — Round-trips nested objects, arrays, strings, booleans, nulls, and numbers through `MinimalJson.parse` and `toPrettyJson`. |
-| `YamsMechanismBridgeTest` | `yacsim.core.yams` | 4 | `fromAngleSupplierComputesPivotPoseAndSupportsInversion`, `fromDistanceSupplierComputesLinearPoseAlongAxisAndZeroOffset`, `chainParentChildComposesNestedMechanismTransforms`, and `estimatesParallelAxisMomentOfInertiaAndMassFromMeshMetadata`. |
+| `YamsMechanismBridgeTest` | `yacsim.core.yams` | 6 | `fromAngleSupplierComputesPivotPoseAndSupportsInversion`, `fromDistanceSupplierComputesLinearPoseAlongAxisAndZeroOffset`, `chainParentChildComposesNestedMechanismTransforms`, `estimatesParallelAxisMomentOfInertiaAndMassFromMeshMetadata`, `fromCascadingElevatorScalesStageHeightsProportionally`, and `fromFourBarKeepsEndEffectorLevelAlongArc`. |

@@ -11,6 +11,7 @@ import static org.wpilib.units.Units.Kilograms;
 import static org.wpilib.units.Units.Meters;
 
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
@@ -95,5 +96,32 @@ class YamsMechanismBridgeTest {
         YamsMechanismBridge.estimateArmMoi(meta, new Translation3d(0.0, 0.0, 0.0), MotionAxis.Y)
             .in(KilogramSquareMeters),
         1e-6);
+  }
+
+  @Test
+  void fromCascadingElevatorScalesStageHeightsProportionally() {
+    AtomicReference<Distance> totalHeight = new AtomicReference<>(Meters.of(1.20));
+    List<Supplier<Pose3d>> stages =
+        YamsMechanismBridge.fromCascadingElevator(
+            totalHeight::get, 3, new Translation3d(0.0, 0.0, 0.10), MotionAxis.Z);
+
+    assertEquals(3, stages.size());
+    assertEquals(0.50, stages.get(0).get().getZ(), 1e-6);
+    assertEquals(0.90, stages.get(1).get().getZ(), 1e-6);
+    assertEquals(1.30, stages.get(2).get().getZ(), 1e-6);
+  }
+
+  @Test
+  void fromFourBarKeepsEndEffectorLevelAlongArc() {
+    AtomicReference<Angle> angle = new AtomicReference<>(Degrees.of(90.0));
+    Supplier<Pose3d> tip =
+        YamsMechanismBridge.fromFourBar(
+            angle::get, new Translation3d(0.2, 0.0, 0.3), 0.5, MotionAxis.Y, true);
+
+    Pose3d pose = tip.get();
+    // Rotating +X=(0.5,0,0) by -90 deg around Y lifts it straight up to (0, 0, +0.5)
+    assertEquals(0.2, pose.getX(), 1e-6);
+    assertEquals(0.8, pose.getZ(), 1e-6);
+    assertEquals(0.0, pose.getRotation().getY(), 1e-6);
   }
 }

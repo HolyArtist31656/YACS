@@ -16,10 +16,12 @@ import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation2d;
 import org.wpilib.math.geometry.Rotation3d;
+import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.math.kinematics.SwerveModulePosition;
 import org.wpilib.system.Filesystem;
 import yacsim.commands3.CadRobotMechanism;
+import yacsim.core.advantagescope.AdvantageScopeConfigGenerator;
 import yacsim.core.cad.CadAssetConfig;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.drivetrain.YamsDrivetrainBridge;
@@ -79,6 +81,14 @@ public class SuperstructureMechanism implements Mechanism {
             .withExtensionMargin(0.30, 1.98)
             .ignoreRestingOverlaps()
             .autoGroundChassis()
+            .addCamera(
+                "FrontCam",
+                new Transform3d(
+                    new Translation3d(0.25, 0.0, 0.40),
+                    new Rotation3d(0.0, Math.toRadians(-15.0), 0.0)),
+                70.0,
+                1280,
+                800)
             .withAdvantageScopeExportDir(advantageScopeDir)
             .withAutoInstallToAdvantageScope()
             .addComponent(
@@ -91,6 +101,9 @@ public class SuperstructureMechanism implements Mechanism {
                     .withParentComponent("Elevator")
                     .withPoseSupplier(
                         YamsMechanismBridge.chainParentChild(elevatorPose, armLocalPose)));
+
+    AdvantageScopeConfigGenerator.exportStarterLayout(
+        robotConfig, advantageScopeDir.resolve("examplebot-layout.json"));
 
     this.cadSim = new CadRobotMechanism(this, robotConfig);
   }
