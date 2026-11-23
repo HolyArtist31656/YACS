@@ -6,11 +6,14 @@ package yacsim.core.model;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.Set;
 import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
 import yacsim.core.advantagescope.AdvantageScopeConfigGenerator;
@@ -38,15 +41,21 @@ public final class CadRobotSimulator implements AutoCloseable {
   private final List<CadComponentConfig> allComponents;
   private final MeshMetadata chassisMetadata;
   private final Map<String, MeshMetadata> componentMetadata = new LinkedHashMap<>();
+  private final BoundingBox3d resolvedExtensionEnvelope;
+  private final double chassisGroundOffsetMeters;
+  private final Set<String> autoIgnoredPairKeys = new LinkedHashSet<>();
+  private final Set<String> autoIgnoredPairLabels = new LinkedHashSet<>();
   private volatile SimSnapshot latestSnapshot;
   private AdvantageScopePublisher publisher;
 
   /**
-   * Parses all configured CAD meshes, optionally exports an AdvantageScope asset bundle, and
-   * initializes NetworkTables publishing.
+   * Parses all configured CAD meshes, optionally derives the extension envelope and calibrates
+   * resting collision pairs, exports an AdvantageScope asset bundle if requested, and initializes
+   * NetworkTables publishing.
    *
    * @param config Robot CAD configuration.
-   * @param enableNetworkTables {@code true} to publish NT4 telemetry, {@code false} for headless unit tests.
+   * @param enableNetworkTables {@code true} to publish NT4 telemetry, {@code false} for headless
+   *     unit tests.
    * @throws IOException If parsing a mesh or exporting the AdvantageScope bundle fails.
    */
   public CadRobotSimulator(CadRobotConfig config, boolean enableNetworkTables) throws IOException {
@@ -59,14 +68,32 @@ public final class CadRobotSimulator implements AutoCloseable {
     for (CadComponentConfig comp : allComponents) {
       componentMetadata.put(comp.getName(), MeshParser.parse(comp.getAssetConfig()));
     }
+    this.resolvedExtensionEnvelope = resolveExtensionEnvelope(config, chassisMetadata);
+    this.chassisGroundOffsetMeters =
+        (config.isAutoGroundChassisEnabled() && chassisMetadata != null)
+            ? -chassisMetadata.localBounds().minZ()
+            : 0.0;
+
     Pose3d[] initialPoses = new Pose3d[allComponents.size()];
     for (int i = 0; i < initialPoses.length; i++) {
       initialPoses[i] = new Pose3d();
     }
     this.latestSnapshot = new SimSnapshot(new Pose2d(), new Pose3d(), initialPoses, List.of());
+
+    if (config.isCollisionCheckingEnabled() && config.isIgnoreRestingOverlapsEnabled()) {
+      calibrateRestingOverlaps();
+    }
     if (config.getAdvantageScopeOutputDir().isPresent()) {
       AdvantageScopeConfigGenerator.exportAssetBundle(
-          config, config.getAdvantageScopeOutputDir().get());
+          config, config.getAdvantageScopeOutputDir().get(), chassisGroundOffsetMeters);
+    }
+    if (config.isAutoInstallToAdvantageScopeEnabled()) {
+      try {
+        AdvantageScopeConfigGenerator.installToAdvantageScope(config, chassisGroundOffsetMeters);
+      } catch (IOException ex) {
+        System.err.println(
+            "[YACSim] Warning: failed to auto-install AdvantageScope assets: " + ex.getMessage());
+      }
     }
     if (enableNetworkTables) {
       this.publisher = new AdvantageScopePublisher(config.getTelemetryTable());
@@ -81,6 +108,47 @@ public final class CadRobotSimulator implements AutoCloseable {
    */
   public CadRobotSimulator(CadRobotConfig config) throws IOException {
     this(config, true);
+  }
+
+  private static BoundingBox3d resolveExtensionEnvelope(
+      CadRobotConfig config, MeshMetadata chassisMeta) {
+    if (config.getExtensionEnvelope().isPresent()) {
+      return config.getExtensionEnvelope().get();
+    }
+    if (config.getExtensionXyMarginMeters().isPresent()
+        && config.getExtensionMaxHeightMeters().isPresent()
+        && chassisMeta != null) {
+      return chassisMeta
+          .localBounds()
+          .expandedForExtension(
+              config.getExtensionXyMarginMeters().getAsDouble(),
+              config.getExtensionMaxHeightMeters().getAsDouble());
+    }
+    return null;
+  }
+
+  private void calibrateRestingOverlaps() {
+    Pose3d[] restingPoses = new Pose3d[allComponents.size()];
+    for (int i = 0; i < allComponents.size(); i++) {
+      restingPoses[i] = allComponents.get(i).getPoseSupplier().get();
+    }
+    List<CollisionEvent> restingHits = evaluateCollisions(restingPoses, false);
+    for (CollisionEvent ev : restingHits) {
+      if (ev.involves("ExtensionEnvelope")) {
+        continue;
+      }
+      String key = CadRobotConfig.canonicalPairKey(ev.componentA(), ev.componentB());
+      if (autoIgnoredPairKeys.add(key)) {
+        String label = ev.componentA() + " <-> " + ev.componentB();
+        autoIgnoredPairLabels.add(label);
+        System.out.println("[YACSim] Auto-ignored resting OBB overlap: " + label);
+      }
+    }
+  }
+
+  private boolean isPairIgnored(String a, String b) {
+    return config.isCollisionPairIgnored(a, b)
+        || autoIgnoredPairKeys.contains(CadRobotConfig.canonicalPairKey(a, b));
   }
 
   /**
@@ -98,7 +166,7 @@ public final class CadRobotSimulator implements AutoCloseable {
       poses[i] = allComponents.get(i).getPoseSupplier().get();
     }
     List<CollisionEvent> collisions =
-        config.isCollisionCheckingEnabled() ? evaluateCollisions(poses) : List.of();
+        config.isCollisionCheckingEnabled() ? evaluateCollisions(poses, true) : List.of();
     this.latestSnapshot =
         new SimSnapshot(robotPose2d, robotPose3d, poses, List.copyOf(collisions));
   }
@@ -112,7 +180,7 @@ public final class CadRobotSimulator implements AutoCloseable {
     }
   }
 
-  private List<CollisionEvent> evaluateCollisions(Pose3d[] poses) {
+  private List<CollisionEvent> evaluateCollisions(Pose3d[] poses, boolean checkEnvelope) {
     List<CollisionEvent> collisions = new ArrayList<>();
     boolean checkChassis =
         chassisMetadata != null
@@ -123,14 +191,14 @@ public final class CadRobotSimulator implements AutoCloseable {
       if (!compA.isCollisionEnabled()) {
         continue;
       }
-      BoundingBox3d boxA = componentMetadata.get(compA.getName()).localBounds();
+      List<BoundingBox3d> boxesA = componentMetadata.get(compA.getName()).collisionSubBounds();
 
       if (checkChassis
           && !compA.getParentComponentName().map("Chassis"::equals).orElse(false)
-          && !config.isCollisionPairIgnored(compA.getName(), "Chassis")) {
+          && !isPairIgnored(compA.getName(), "Chassis")) {
         OptionalDouble chassisHit =
-            ObbCollisionDetector.testObbCollision(
-                boxA, poses[i], chassisMetadata.localBounds(), new Pose3d());
+            ObbCollisionDetector.testMultiObbCollision(
+                boxesA, poses[i], chassisMetadata.collisionSubBounds(), new Pose3d());
         if (chassisHit.isPresent()) {
           collisions.add(
               new CollisionEvent(compA.getName(), "Chassis", chassisHit.getAsDouble()));
@@ -141,23 +209,24 @@ public final class CadRobotSimulator implements AutoCloseable {
         CadComponentConfig compB = allComponents.get(j);
         if (!compB.isCollisionEnabled()
             || areParentChild(compA, compB)
-            || config.isCollisionPairIgnored(compA.getName(), compB.getName())) {
+            || isPairIgnored(compA.getName(), compB.getName())) {
           continue;
         }
-        BoundingBox3d boxB = componentMetadata.get(compB.getName()).localBounds();
+        List<BoundingBox3d> boxesB = componentMetadata.get(compB.getName()).collisionSubBounds();
         OptionalDouble depth =
-            ObbCollisionDetector.testObbCollision(boxA, poses[i], boxB, poses[j]);
+            ObbCollisionDetector.testMultiObbCollision(boxesA, poses[i], boxesB, poses[j]);
         if (depth.isPresent()) {
           collisions.add(
               new CollisionEvent(compA.getName(), compB.getName(), depth.getAsDouble()));
         }
       }
 
-      if (config.getExtensionEnvelope().isPresent()
-          && !config.isCollisionPairIgnored(compA.getName(), "ExtensionEnvelope")) {
+      if (checkEnvelope
+          && resolvedExtensionEnvelope != null
+          && !isPairIgnored(compA.getName(), "ExtensionEnvelope")) {
         OptionalDouble violation =
-            ObbCollisionDetector.testEnvelopeViolation(
-                boxA, poses[i], config.getExtensionEnvelope().get());
+            ObbCollisionDetector.testMultiEnvelopeViolation(
+                boxesA, poses[i], resolvedExtensionEnvelope);
         if (violation.isPresent()) {
           collisions.add(
               new CollisionEvent(compA.getName(), "ExtensionEnvelope", violation.getAsDouble()));
@@ -195,6 +264,40 @@ public final class CadRobotSimulator implements AutoCloseable {
    */
   public Optional<CadMassProperties> getComponentMassProperties(String name) {
     return getComponentMetadata(name).map(MeshMetadata::massProperties);
+  }
+
+  /**
+   * Returns the effective legal extension envelope—either explicitly set via {@link
+   * CadRobotConfig#withExtensionEnvelope} or auto-derived from chassis bounds via {@link
+   * CadRobotConfig#withExtensionMargin}.
+   *
+   * @return Resolved {@link BoundingBox3d}, if configured.
+   */
+  public Optional<BoundingBox3d> getResolvedExtensionEnvelope() {
+    return Optional.ofNullable(resolvedExtensionEnvelope);
+  }
+
+  /**
+   * Returns an unmodifiable set of human-readable pair labels (for example {@code "Slamtake <->
+   * FrontHopper"}) auto-ignored at startup when {@link CadRobotConfig#ignoreRestingOverlaps()} is
+   * enabled.
+   *
+   * @return Unmodifiable set of auto-ignored resting pair labels.
+   */
+  public Set<String> getAutoIgnoredRestingPairs() {
+    return Collections.unmodifiableSet(autoIgnoredPairLabels);
+  }
+
+
+  /**
+   * Returns the vertical grounding offset applied to the chassis in exported AdvantageScope configs
+   * ({@code -chassisBounds.minZ()} when {@link CadRobotConfig#autoGroundChassis()} is enabled, or
+   * {@code 0.0} otherwise).
+   *
+   * @return Chassis vertical grounding offset in meters.
+   */
+  public double getChassisGroundOffsetMeters() {
+    return chassisGroundOffsetMeters;
   }
 
   /** @return Latest sampled 2D field pose. */

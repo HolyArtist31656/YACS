@@ -4,9 +4,13 @@
 
 package frc.robot.mechanisms;
 
+import static org.wpilib.units.Units.Meters;
+import static org.wpilib.units.Units.Radians;
+
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.Supplier;
 import org.wpilib.command3.Mechanism;
 import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
@@ -21,7 +25,7 @@ import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.drivetrain.YamsDrivetrainBridge;
 import yacsim.core.model.CadComponentConfig;
 import yacsim.core.model.CadRobotConfig;
-import yacsim.core.physics.BoundingBox3d;
+import yacsim.core.yams.MotionAxis;
 import yacsim.core.yams.YamsMechanismBridge;
 
 public class SuperstructureMechanism implements Mechanism {
@@ -59,22 +63,34 @@ public class SuperstructureMechanism implements Mechanism {
                   new SwerveModulePosition(simulatedWheelDistanceMeters, simulatedSteerAngle)
                 });
 
+    Supplier<Pose3d> elevatorPose =
+        YamsMechanismBridge.fromDistanceSupplier(
+            () -> Meters.of(simulatedElevatorHeightMeters), new Translation3d(), MotionAxis.Z);
+    Supplier<Pose3d> armLocalPose =
+        YamsMechanismBridge.fromAngleSupplier(
+            () -> Radians.of(simulatedArmAngleRadians),
+            new Translation3d(0.12, 0.0, 0.05),
+            MotionAxis.Y,
+            true);
+
     CadRobotConfig robotConfig =
         new CadRobotConfig("ExampleBot_2027")
             .withDrivetrain(drivetrainConfig)
-            .withExtensionEnvelope(new BoundingBox3d(-0.65, -0.65, 0.0, 0.65, 0.65, 1.98))
+            .withExtensionMargin(0.30, 1.98)
+            .ignoreRestingOverlaps()
+            .autoGroundChassis()
             .withAdvantageScopeExportDir(advantageScopeDir)
+            .withAutoInstallToAdvantageScope()
             .addComponent(
                 new CadComponentConfig(
                         "Elevator", new CadAssetConfig(modelsDir.resolve("elevator_carriage.glb")))
                     .withParentComponent("Chassis")
-                    .withPoseSupplier(this::getElevatorPose3d))
+                    .withPoseSupplier(elevatorPose))
             .addComponent(
                 new CadComponentConfig("Arm", new CadAssetConfig(modelsDir.resolve("arm.glb")))
                     .withParentComponent("Elevator")
                     .withPoseSupplier(
-                        YamsMechanismBridge.chainParentChild(
-                            this::getElevatorPose3d, this::getArmLocalPose3d)));
+                        YamsMechanismBridge.chainParentChild(elevatorPose, armLocalPose)));
 
     this.cadSim = new CadRobotMechanism(this, robotConfig);
   }
@@ -102,15 +118,6 @@ public class SuperstructureMechanism implements Mechanism {
     simulatedArmAngleRadians = Math.toRadians(25.0 + 40.0 * Math.sin(simTimeSeconds * 1.6));
 
     cadSim.simulationPeriodic();
-  }
-
-  public Pose3d getElevatorPose3d() {
-    return new Pose3d(new Translation3d(0.0, 0.0, simulatedElevatorHeightMeters), new Rotation3d());
-  }
-
-  public Pose3d getArmLocalPose3d() {
-    return new Pose3d(
-        new Translation3d(0.12, 0.0, 0.05), new Rotation3d(0.0, -simulatedArmAngleRadians, 0.0));
   }
 
   public CadRobotMechanism getCadSim() {

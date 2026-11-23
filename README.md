@@ -22,9 +22,10 @@ https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
 ## Features
 
 - **Native CAD Mesh Parsing**: Parses `.glb` / `.gltf` (glTF 2.0), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
-- **YAMS & Commands v3 Integration**: Pairs with YAMS `Arm`, `Elevator`, `Pivot`, and `SwerveDrive` via `CadRobotMechanism`, `YamsMechanismBridge`, and `YamsDrivetrainBridge`.
+- **Direct YAMS & Commands v3 Adapters**: Wire YAMS `Arm`, `Elevator`, `Pivot`, and `SwerveDrive` mechanisms directly with `YamsCommands3Bridge`, `YamsMechanismBridge`, and `YamsDrivetrainBridge`—no hand-written `Pose3d` math required.
+- **CAD-to-YAMS Mass & MOI Estimation**: Compute WPILib `Mass` and parallel-axis `MomentOfInertia` directly from parsed CAD meshes (`YamsMechanismBridge.estimateMass` / `estimateArmMoi`) to seed YAMS physics.
+- **Multi-Primitive `.glb` Sub-OBBs & Auto-Calibrated Collisions**: Automatically derive legal FRC extension envelopes from your chassis CAD (`withExtensionMargin`), auto-ignore resting coupled-linkage OBB overlaps (`ignoreRestingOverlaps`), or configure explicit `ignoreCollisionPair(a, b)` rules and Commands v3 `CadCollisionTriggers`.
 - **AdvantageScope 3D Pipeline**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, and `CollisionDetails` over NT4, and exports ready-to-load `Robot_<Name>` AdvantageScope asset bundles with ordered multi-axis rotations.
-- **OBB Collision & Envelope Checking**: Runs oriented bounding box (OBB) collision checks between mechanisms, chassis, and FRC extension envelopes, with symmetric `ignoreCollisionPair(a, b)` exclusions and Commands v3 `CadCollisionTriggers`.
 - **SystemCore 2 GB Validated**: Verified on FRC Team 6328's 2026 robot (*Darwin*, 2.1M+ triangles across 5 `.glb` meshes) under a strict `-Xmx256m` robot JVM cap with `~0.64 ms` `robotPeriodic()` telemetry overhead and zero steady-state loop overruns.
 
 ## Quickstart
@@ -34,12 +35,22 @@ CadRobotConfig config =
     new CadRobotConfig("MyRobot")
         .withChassisAsset(new CadAssetConfig(modelsDir.resolve("chassis.glb")))
         .withDrivetrainPoseSupplier(drive::getPose)
-        .withExtensionEnvelope(new BoundingBox3d(-0.75, -0.75, 0.0, 0.75, 0.75, 1.85))
+        .withExtensionMargin(0.35, 1.85) // Auto-derived from chassis.glb bounds
+        .ignoreRestingOverlaps()         // Auto-silences resting coupled-linkage OBB overlaps
+        .autoGroundChassis()             // Shifts chassis minZ to 0.0 on the field carpet
+        .withAutoInstallToAdvantageScope() // Exports directly to AdvantageScope User Assets
         .addComponent(
             new CadComponentConfig("Arm", new CadAssetConfig(modelsDir.resolve("arm.glb")))
                 .withParentComponent("Chassis")
-                .withPoseSupplier(arm::getPose3d))
-        .ignoreCollisionPair("Intake", "Hopper");
+                .withPoseSupplier(
+                    YamsCommands3Bridge.fromYamsArm(
+                        arm, new Translation3d(0.2, 0.0, 0.45), MotionAxis.Y)))
+        .addComponent(
+            new CadComponentConfig("Elevator", new CadAssetConfig(modelsDir.resolve("elevator.glb")))
+                .withParentComponent("Chassis")
+                .withPoseSupplier(
+                    YamsCommands3Bridge.fromYamsElevator(
+                        elevator, new Translation3d(0.0, 0.0, 0.1), MotionAxis.Z)));
 
 CadRobotMechanism cadSim = new CadRobotMechanism(this, config);
 ```
@@ -51,9 +62,9 @@ Call `cadSim.periodic()` from `robotPeriodic()` and `cadSim.simulationPeriodic()
 | Guide | Description |
 | --- | --- |
 | [Getting Started](docs/GETTING_STARTED.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
-| [Guides](docs/GUIDES.md) | CAD prep, multi-axis rotations, YAMS bridges, OBB collisions, and the FRC 6328 Darwin walkthrough |
+| [Guides](docs/GUIDES.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
-| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 7 JUnit 5 test classes (15 tests) and how to run them |
+| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (27 tests) and how to run them |
 | [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and Darwin benchmarks |
 | [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027` & `darwin_6328_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |

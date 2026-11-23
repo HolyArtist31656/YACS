@@ -2,5 +2,9 @@
 // Open Source Software; you can modify and/or share it under the terms of
 // the GNU Lesser General Public License v3.0 (LGPL-3.0) in the root directory.
 
-/** Pose-supplier and parent-child kinematic helpers ({@link yacsim.core.yams.YamsMechanismBridge}) for connecting YAMS mechanisms to YACSim articulated CAD components. */
+/**
+ * Axis definitions ({@link yacsim.core.yams.MotionAxis}) and pose-supplier helpers ({@link
+ * yacsim.core.yams.YamsMechanismBridge}) for connecting angular, linear, and parent–child mechanism
+ * kinematics to YACSim articulated CAD components.
+ */
 package yacsim.core.yams;

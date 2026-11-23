@@ -96,4 +96,29 @@ class AdvantageScopeConfigGeneratorTest {
     assertEquals("y", compRots.get(2).get("axis"));
     assertEquals(147.5, ((Number) compRots.get(2).get("degrees")).doubleValue(), 1e-6);
   }
+
+  @Test
+  void resolvesDefaultAdvantageScopeUserAssetsDir() {
+    assertTrue(AdvantageScopeConfigGenerator.resolveDefaultUserAssetsDir().isPresent());
+    assertTrue(
+        AdvantageScopeConfigGenerator.resolveDefaultUserAssetsDir()
+            .orElseThrow()
+            .endsWith(Path.of("AdvantageScope", "userAssets")));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void appliesChassisGroundOffsetToConfigJson(@TempDir Path tempDir) throws IOException {
+    CadRobotConfig robot =
+        new CadRobotConfig("GroundedBot")
+            .withChassisAsset(
+                new CadAssetConfig(tempDir.resolve("chassis.glb"))
+                    .withZeroedPosition(new Translation3d(0.0, 0.0, 0.02)));
+
+    Map<String, Object> json =
+        (Map<String, Object>)
+            MinimalJson.parse(AdvantageScopeConfigGenerator.buildConfigJson(robot, 0.05));
+    List<Number> pos = (List<Number>) json.get("position");
+    assertEquals(0.07, pos.get(2).doubleValue(), 1e-6);
+  }
 }

@@ -12,7 +12,9 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Translation3d;
 import yacsim.core.cad.CadAssetConfig;
@@ -22,11 +24,54 @@ import yacsim.core.model.CadRobotConfig;
 import yacsim.core.util.MinimalJson;
 
 /**
- * Generates AdvantageScope {@code config.json} files and complete {@code Robot_<Name>} custom asset
- * bundles from a {@link CadRobotConfig}.
+ * Generates AdvantageScope {@code config.json} files, exports {@code Robot_<Name>} custom asset
+ * bundles, and supports direct OS-aware installation into AdvantageScope's User Assets directory.
  */
 public final class AdvantageScopeConfigGenerator {
   private AdvantageScopeConfigGenerator() {}
+
+  /**
+   * Resolves the standard OS-specific AdvantageScope {@code userAssets} directory:
+   *
+   * <ul>
+   *   <li>Windows: {@code %APPDATA%/AdvantageScope/userAssets}
+   *   <li>macOS: {@code ~/Library/Application Support/AdvantageScope/userAssets}
+   *   <li>Linux: {@code $XDG_CONFIG_HOME/AdvantageScope/userAssets} or {@code
+   *       ~/.config/AdvantageScope/userAssets}
+   * </ul>
+   *
+   * @return Resolved {@code userAssets} path, or empty if home/config environment variables are
+   *     unavailable.
+   */
+  public static Optional<Path> resolveDefaultUserAssetsDir() {
+    String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+    String userHome = System.getProperty("user.home", "");
+    if (os.contains("win")) {
+      String appData = System.getenv("APPDATA");
+      if (appData != null && !appData.isBlank()) {
+        return Optional.of(Path.of(appData, "AdvantageScope", "userAssets"));
+      }
+      if (!userHome.isBlank()) {
+        return Optional.of(Path.of(userHome, "AppData", "Roaming", "AdvantageScope", "userAssets"));
+      }
+      return Optional.empty();
+    }
+    if (os.contains("mac")) {
+      if (!userHome.isBlank()) {
+        return Optional.of(
+            Path.of(userHome, "Library", "Application Support", "AdvantageScope", "userAssets"));
+      }
+      return Optional.empty();
+    }
+    String xdg = System.getenv("XDG_CONFIG_HOME");
+    if (xdg != null && !xdg.isBlank()) {
+      return Optional.of(Path.of(xdg, "AdvantageScope", "userAssets"));
+    }
+    if (!userHome.isBlank()) {
+      return Optional.of(Path.of(userHome, ".config", "AdvantageScope", "userAssets"));
+    }
+    return Optional.empty();
+  }
 
   /**
    * Builds the AdvantageScope {@code config.json} payload for the given robot configuration.
@@ -35,16 +80,32 @@ public final class AdvantageScopeConfigGenerator {
    * @return Pretty-printed JSON string ready to write as {@code config.json}.
    */
   public static String buildConfigJson(CadRobotConfig robotConfig) {
+    return buildConfigJson(robotConfig, 0.0);
+  }
+
+  /**
+   * Builds the AdvantageScope {@code config.json} payload with an additional chassis vertical
+   * grounding offset (typically {@code -chassisMinZ} when {@link CadRobotConfig#autoGroundChassis()}
+   * is enabled).
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @param chassisGroundOffsetZ Additional Z offset in meters added to the chassis position.
+   * @return Pretty-printed JSON string ready to write as {@code config.json}.
+   */
+  public static String buildConfigJson(CadRobotConfig robotConfig, double chassisGroundOffsetZ) {
     Map<String, Object> root = new LinkedHashMap<>();
     root.put("name", robotConfig.getRobotName());
     root.put("disableSimplification", robotConfig.isDisableAdvantageScopeSimplification());
     if (robotConfig.getChassisAsset().isPresent()) {
       CadAssetConfig chassis = robotConfig.getChassisAsset().get();
+      Translation3d basePos = chassis.getZeroedPositionMeters();
+      Translation3d groundedPos =
+          new Translation3d(basePos.getX(), basePos.getY(), basePos.getZ() + chassisGroundOffsetZ);
       root.put("rotations", rotationList(chassis));
-      root.put("position", positionList(chassis.getZeroedPositionMeters()));
+      root.put("position", positionList(groundedPos));
     } else {
       root.put("rotations", List.of());
-      root.put("position", positionList(new Translation3d()));
+      root.put("position", positionList(new Translation3d(0.0, 0.0, chassisGroundOffsetZ)));
     }
     root.put("cameras", List.of());
     List<Object> components = new ArrayList<>();
@@ -70,11 +131,29 @@ public final class AdvantageScopeConfigGenerator {
    */
   public static Path exportAssetBundle(CadRobotConfig robotConfig, Path parentAssetsDir)
       throws IOException {
+    return exportAssetBundle(robotConfig, parentAssetsDir, 0.0);
+  }
+
+  /**
+   * Exports a ready-to-load {@code Robot_<Name>} AdvantageScope directory with an optional chassis
+   * vertical grounding offset applied to {@code config.json}.
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @param parentAssetsDir Parent directory in which {@code Robot_<Name>} will be created.
+   * @param chassisGroundOffsetZ Additional Z offset in meters added to the chassis position.
+   * @return Path to the generated {@code Robot_<Name>} directory.
+   * @throws IOException If creating directories or copying mesh files fails.
+   */
+  public static Path exportAssetBundle(
+      CadRobotConfig robotConfig, Path parentAssetsDir, double chassisGroundOffsetZ)
+      throws IOException {
     String safeName = robotConfig.getRobotName().replaceAll("[^A-Za-z0-9_-]", "_");
     Path robotDir = parentAssetsDir.resolve("Robot_" + safeName);
     Files.createDirectories(robotDir);
     Files.writeString(
-        robotDir.resolve("config.json"), buildConfigJson(robotConfig), StandardCharsets.UTF_8);
+        robotDir.resolve("config.json"),
+        buildConfigJson(robotConfig, chassisGroundOffsetZ),
+        StandardCharsets.UTF_8);
 
     if (robotConfig.getChassisAsset().isPresent()) {
       Path chassisPath = robotConfig.getChassisAsset().get().getMeshPath();
@@ -95,6 +174,41 @@ public final class AdvantageScopeConfigGenerator {
       idx++;
     }
     return robotDir;
+  }
+
+  /**
+   * Installs {@code Robot_<Name>} directly into the current OS's default AdvantageScope {@code
+   * userAssets} directory without nesting.
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @return Path to the installed {@code Robot_<Name>} directory, or empty if the OS directory
+   *     could not be resolved.
+   * @throws IOException If writing the asset bundle fails.
+   */
+  public static Optional<Path> installToAdvantageScope(CadRobotConfig robotConfig)
+      throws IOException {
+    return installToAdvantageScope(robotConfig, 0.0);
+  }
+
+  /**
+   * Installs {@code Robot_<Name>} directly into the current OS's default AdvantageScope {@code
+   * userAssets} directory with an optional chassis vertical grounding offset.
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @param chassisGroundOffsetZ Additional Z offset in meters added to the chassis position.
+   * @return Path to the installed {@code Robot_<Name>} directory, or empty if the OS directory
+   *     could not be resolved.
+   * @throws IOException If writing the asset bundle fails.
+   */
+  public static Optional<Path> installToAdvantageScope(
+      CadRobotConfig robotConfig, double chassisGroundOffsetZ) throws IOException {
+    Optional<Path> userAssetsDir = resolveDefaultUserAssetsDir();
+    if (userAssetsDir.isEmpty()) {
+      return Optional.empty();
+    }
+    Path installed = exportAssetBundle(robotConfig, userAssetsDir.get(), chassisGroundOffsetZ);
+    System.out.println("[YACSim] Installed AdvantageScope asset bundle: " + installed);
+    return Optional.of(installed);
   }
 
   private static List<Object> rotationList(CadAssetConfig asset) {

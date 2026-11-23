@@ -28,6 +28,8 @@ import yacsim.core.util.MinimalJson;
 public final class MeshParser {
   private static final int GLB_MAGIC = 0x46546C67;
   private static final int GLB_JSON_CHUNK = 0x4E4F534A;
+  /** Maximum per-primitive sub-OBBs retained per glTF/GLB asset to keep 50 Hz SystemCore checks fast. */
+  public static final int MAX_SUB_OBBS = 64;
 
   private MeshParser() {}
 
@@ -75,7 +77,7 @@ public final class MeshParser {
     }
     return new MeshMetadata(
         raw.sourcePath(), raw.format(), raw.triangleCount(), raw.fileSizeBytes(),
-        raw.localBounds(), massProps);
+        raw.localBounds(), massProps, raw.collisionSubBounds());
   }
 
   private static MeshMetadata parseStl(Path path, long fileSize, CadAssetConfig config) throws IOException {
@@ -209,6 +211,8 @@ public final class MeshParser {
     double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
     double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
     int totalTriangles = 0;
+    List<BoundingBox3d> subBoxes = new ArrayList<>();
+    boolean subBoxOverflow = false;
 
     if (meshes != null && accessors != null) {
       for (Object meshObj : meshes) {
@@ -227,12 +231,26 @@ public final class MeshParser {
             List<Object> mn = (List<Object>) posAcc.get("min");
             List<Object> mx = (List<Object>) posAcc.get("max");
             if (mn != null && mx != null && mn.size() >= 3 && mx.size() >= 3) {
-              minX = Math.min(minX, ((Number) mn.get(0)).doubleValue() * scale);
-              minY = Math.min(minY, ((Number) mn.get(1)).doubleValue() * scale);
-              minZ = Math.min(minZ, ((Number) mn.get(2)).doubleValue() * scale);
-              maxX = Math.max(maxX, ((Number) mx.get(0)).doubleValue() * scale);
-              maxY = Math.max(maxY, ((Number) mx.get(1)).doubleValue() * scale);
-              maxZ = Math.max(maxZ, ((Number) mx.get(2)).doubleValue() * scale);
+              double pMinX = ((Number) mn.get(0)).doubleValue() * scale;
+              double pMinY = ((Number) mn.get(1)).doubleValue() * scale;
+              double pMinZ = ((Number) mn.get(2)).doubleValue() * scale;
+              double pMaxX = ((Number) mx.get(0)).doubleValue() * scale;
+              double pMaxY = ((Number) mx.get(1)).doubleValue() * scale;
+              double pMaxZ = ((Number) mx.get(2)).doubleValue() * scale;
+              minX = Math.min(minX, pMinX);
+              minY = Math.min(minY, pMinY);
+              minZ = Math.min(minZ, pMinZ);
+              maxX = Math.max(maxX, pMaxX);
+              maxY = Math.max(maxY, pMaxY);
+              maxZ = Math.max(maxZ, pMaxZ);
+              if (!subBoxOverflow) {
+                if (subBoxes.size() < MAX_SUB_OBBS) {
+                  subBoxes.add(new BoundingBox3d(pMinX, pMinY, pMinZ, pMaxX, pMaxY, pMaxZ));
+                } else {
+                  subBoxOverflow = true;
+                  subBoxes.clear();
+                }
+              }
             }
           }
         }
@@ -242,9 +260,11 @@ public final class MeshParser {
       throw new CadMeshValidationException("glTF/GLB mesh has no POSITION accessor min/max bounds.");
     }
     BoundingBox3d bounds = new BoundingBox3d(minX, minY, minZ, maxX, maxY, maxZ);
+    List<BoundingBox3d> effectiveSubBounds = subBoxes.isEmpty() ? List.of(bounds) : subBoxes;
     return new MeshMetadata(
         path, format, totalTriangles, fileSize, bounds,
-        CadMassProperties.fromBoundingBox(bounds, config.getDensityKgPerM3()));
+        CadMassProperties.fromBoundingBox(bounds, config.getDensityKgPerM3()),
+        effectiveSubBounds);
   }
 
   private static final class MeshAccumulator {

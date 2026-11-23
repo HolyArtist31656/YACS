@@ -15,12 +15,16 @@ CadRobotConfig config =
     new CadRobotConfig("MyRobot")
         .withChassisAsset(new CadAssetConfig(modelsDir.resolve("chassis.glb")))
         .withDrivetrainPoseSupplier(drive::getPose)
-        .withExtensionEnvelope(new BoundingBox3d(-0.75, -0.75, 0.0, 0.75, 0.75, 1.85))
+        .withExtensionMargin(0.35, 1.85)
+        .ignoreRestingOverlaps()
+        .autoGroundChassis()
+        .withAutoInstallToAdvantageScope()
         .addComponent(
             new CadComponentConfig("Arm", new CadAssetConfig(modelsDir.resolve("arm.glb")))
                 .withParentComponent("Chassis")
-                .withPoseSupplier(arm::getPose3d))
-        .ignoreCollisionPair("Intake", "Hopper");
+                .withPoseSupplier(
+                    YamsCommands3Bridge.fromYamsArm(
+                        arm, new Translation3d(0.2, 0.0, 0.45), MotionAxis.Y)));
 
 CadRobotMechanism cadSim = new CadRobotMechanism(this, config);
 }</pre>

@@ -48,30 +48,36 @@ import java.nio.file.Path;
 import java.util.function.Supplier;
 import org.wpilib.command3.Mechanism;
 import org.wpilib.math.geometry.Pose2d;
-import org.wpilib.math.geometry.Pose3d;
+import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.system.Filesystem;
 import yacsim.commands3.CadRobotMechanism;
+import yacsim.commands3.YamsCommands3Bridge;
 import yacsim.core.cad.CadAssetConfig;
 import yacsim.core.model.CadComponentConfig;
 import yacsim.core.model.CadRobotConfig;
-import yacsim.core.physics.BoundingBox3d;
+import yacsim.core.yams.MotionAxis;
+import yams.commands3.mechanisms.Arm;
 
 public class RobotCadSim implements Mechanism {
   private final CadRobotMechanism cadSim;
 
-  public RobotCadSim(Supplier<Pose2d> drivePose, Supplier<Pose3d> armPose) throws IOException {
+  public RobotCadSim(Supplier<Pose2d> drivePose, Arm arm) throws IOException {
     Path models = Filesystem.getDeployDirectory().toPath().resolve("yacsim/models");
 
     CadRobotConfig config =
         new CadRobotConfig("MyRobot")
             .withChassisAsset(new CadAssetConfig(models.resolve("chassis.glb")))
             .withDrivetrainPoseSupplier(drivePose)
-            .withExtensionEnvelope(new BoundingBox3d(-0.75, -0.75, 0.0, 0.75, 0.75, 1.85))
-            .withAdvantageScopeExportDir(Path.of("advantagescope-assets"))
+            .withExtensionMargin(0.35, 1.85) // Auto-derived from chassis.glb bounds
+            .ignoreRestingOverlaps()         // Auto-ignores coupled sibling overlaps at t = 0
+            .autoGroundChassis()               // Shifts chassis minZ flush to z = 0.0
+            .withAutoInstallToAdvantageScope() // Installs Robot_<Name> straight into AdvantageScope
             .addComponent(
                 new CadComponentConfig("Arm", new CadAssetConfig(models.resolve("arm.glb")))
                     .withParentComponent("Chassis")
-                    .withPoseSupplier(armPose));
+                    .withPoseSupplier(
+                        YamsCommands3Bridge.fromYamsArm(
+                            arm, new Translation3d(0.2, 0.0, 0.45), MotionAxis.Y)));
 
     this.cadSim = new CadRobotMechanism(this, config);
   }
@@ -98,7 +104,7 @@ In WPILib `2027.0.0-alpha-7`, desktop simulation uses Gradle's `application` plu
 
 ## Viewing in AdvantageScope
 
-1. If you configured `.withAdvantageScopeExportDir(Path.of("advantagescope-assets"))`, copy the generated `Robot_<Name>` folder **directly** into AdvantageScope's User Assets directory (do not nest it inside an outer wrapper folder).
+1. With `.withAutoInstallToAdvantageScope()`, YACSim installs `Robot_<Name>` directly into your OS AdvantageScope `userAssets` folder automatically (or if you used `.withAdvantageScopeExportDir(...)`, copy `Robot_<Name>` directly into User Assets without nesting).
 2. Connect AdvantageScope to `127.0.0.1` (NT4).
 3. Open a **3D Field** tab, drag `NT:/YACSim/RobotPose3d` onto **Poses → Robot**, select your `Robot_<Name>` model, and drag `NT:/YACSim/ComponentPoses` onto **Components**.
 4. Open a **Table** or **Line Graph** tab and add `NT:/YACSim/CollisionActive` and `NT:/YACSim/CollisionDetails` to monitor live OBB collisions.

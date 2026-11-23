@@ -8,6 +8,7 @@ YACSim is engineered specifically for the **WPILib 2027 SystemCore** (Raspberry 
 
 - **Commands v3 Only**: Targets WPILib 2027 `CommandsV3.json` + `yams_commands3.json` exclusively—eliminating Commands v2/v3 vendordep conflicts.
 - **Zero Extra Runtime JARs**: Relies strictly on WPILib 2027 and YAMS 2027. Pure-Java `MinimalJson` handles glTF 2.0 JSON chunks and AdvantageScope `config.json` generation with zero Jackson/Gson overhead.
+- **Multi-Primitive Sub-OBB Capping**: `MeshParser` retains up to `64` per-primitive bounding boxes (`MAX_SUB_OBBS`) for concave `.glb`/`.gltf` mechanisms so `ObbCollisionDetector.testMultiObbCollision` avoids false-positive cavity hits while collapsing massive multi-hundred-primitive assemblies to a single outer box to protect 50 Hz loop times.
 - **Header-Only glTF/GLB Parsing**: `MeshParser` inspects glTF 2.0 `POSITION` accessor `min`/`max` bounds and primitive index counts directly from the JSON chunk without decoding vertex or texture buffers into Java heap memory.
 - **Lock-Free Threading (`SimSnapshot`)**: `CadRobotSimulator` stores simulation state in an immutable `record SimSnapshot(Pose2d, Pose3d, Pose3d[], List<CollisionEvent>)` held in a `volatile` field. `simIterate()` (safe to run on a high-rate `Notifier` thread) swaps the reference atomically, while `updateTelemetry()` reads a consistent snapshot on the 50 Hz main thread with zero locking and zero `ArrayIndexOutOfBoundsException` risk.
 

@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose2d;
@@ -32,7 +33,12 @@ public final class CadRobotConfig {
   private String telemetryTable = "YACSim";
   private Path advantageScopeOutputDir = null;
   private BoundingBox3d extensionEnvelope = null;
+  private OptionalDouble extensionXyMarginMeters = OptionalDouble.empty();
+  private OptionalDouble extensionMaxHeightMeters = OptionalDouble.empty();
   private boolean collisionCheckingEnabled = true;
+  private boolean ignoreRestingOverlaps = false;
+  private boolean autoInstallToAdvantageScope = false;
+  private boolean autoGroundChassis = false;
   private boolean disableAdvantageScopeSimplification = false;
 
   /**
@@ -45,8 +51,8 @@ public final class CadRobotConfig {
   }
 
   /**
-   * Attaches a {@link CadDrivetrainConfig}, populating the chassis asset, field pose supplier,
-   * and articulated swerve/wheel components.
+   * Attaches a {@link CadDrivetrainConfig}, populating the chassis asset, field pose supplier, and
+   * articulated swerve/wheel components.
    *
    * @param cfg Drivetrain configuration.
    * @return This config for chaining.
@@ -103,8 +109,8 @@ public final class CadRobotConfig {
   }
 
   /**
-   * Sets an output directory to automatically export an AdvantageScope {@code Robot_<Name>}
-   * bundle on simulator startup.
+   * Sets an output directory to automatically export an AdvantageScope {@code Robot_<Name>} bundle
+   * on simulator startup.
    *
    * @param p Parent output directory, or {@code null} to disable automatic export.
    * @return This config for chaining.
@@ -115,14 +121,36 @@ public final class CadRobotConfig {
   }
 
   /**
-   * Sets the legal robot-frame extension envelope checked against every collision-enabled
-   * component.
+   * Sets an explicit legal robot-frame extension envelope checked against every collision-enabled
+   * component. Takes precedence over {@link #withExtensionMargin(double, double)}.
    *
    * @param b Allowed {@link BoundingBox3d} in meters, or {@code null} to disable.
    * @return This config for chaining.
    */
   public CadRobotConfig withExtensionEnvelope(BoundingBox3d b) {
     this.extensionEnvelope = b;
+    return this;
+  }
+
+  /**
+   * Automatically derives the legal FRC extension envelope from the parsed chassis CAD bounding box
+   * by expanding horizontally by {@code xyMarginMeters} on all four sides and capping vertical
+   * height to {@code [0.0, maxHeightMeters]}.
+   *
+   * @param xyMarginMeters Non-negative horizontal extension margin beyond chassis bounds in meters.
+   * @param maxHeightMeters Positive maximum legal height in meters.
+   * @return This config for chaining.
+   * @throws IllegalArgumentException If {@code xyMarginMeters < 0} or {@code maxHeightMeters <= 0}.
+   */
+  public CadRobotConfig withExtensionMargin(double xyMarginMeters, double maxHeightMeters) {
+    if (xyMarginMeters < 0.0) {
+      throw new IllegalArgumentException("xyMarginMeters must be non-negative.");
+    }
+    if (maxHeightMeters <= 0.0) {
+      throw new IllegalArgumentException("maxHeightMeters must be positive.");
+    }
+    this.extensionXyMarginMeters = OptionalDouble.of(xyMarginMeters);
+    this.extensionMaxHeightMeters = OptionalDouble.of(maxHeightMeters);
     return this;
   }
 
@@ -138,8 +166,35 @@ public final class CadRobotConfig {
   }
 
   /**
+   * Enables automatic startup calibration that samples initial component poses once at {@code t =
+   * 0} and ignores any component-to-component or component-to-chassis OBB pairs already overlapping
+   * at rest. {@code ExtensionEnvelope} violations are never auto-ignored.
+   *
+   * @return This config for chaining.
+   */
+  public CadRobotConfig ignoreRestingOverlaps() {
+    this.ignoreRestingOverlaps = true;
+    return this;
+  }
+
+  /**
+   * Enables or disables automatic startup ignoring of resting component/chassis OBB overlaps.
+   *
+   * @param enabled {@code true} to auto-ignore resting sibling/chassis OBB overlaps.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withIgnoreRestingOverlaps(boolean enabled) {
+    this.ignoreRestingOverlaps = enabled;
+    return this;
+  }
+
+  /**
    * Ignores OBB collision checks between two named components (order-independent). Also supports
    * {@code "Chassis"} and {@code "ExtensionEnvelope"} as target names.
+   *
+   * @param componentA First component name.
+   * @param componentB Second component name.
+   * @return This config for chaining.
    */
   public CadRobotConfig ignoreCollisionPair(String componentA, String componentB) {
     Objects.requireNonNull(componentA, "componentA");
@@ -163,7 +218,7 @@ public final class CadRobotConfig {
     return ignoredCollisionPairs.contains(canonicalPairKey(componentA, componentB));
   }
 
-  private static String canonicalPairKey(String a, String b) {
+  static String canonicalPairKey(String a, String b) {
     return a.compareTo(b) <= 0 ? a + "\u0000" + b : b + "\u0000" + a;
   }
 
@@ -175,6 +230,53 @@ public final class CadRobotConfig {
    */
   public CadRobotConfig withDisableAdvantageScopeSimplification(boolean d) {
     this.disableAdvantageScopeSimplification = d;
+    return this;
+  }
+
+
+  /**
+   * Automatically installs the exported {@code Robot_<Name>} bundle directly into the current OS's
+   * default AdvantageScope {@code userAssets} directory on simulator startup.
+   *
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withAutoInstallToAdvantageScope() {
+    this.autoInstallToAdvantageScope = true;
+    return this;
+  }
+
+  /**
+   * Enables or disables automatic installation into the OS AdvantageScope {@code userAssets}
+   * directory.
+   *
+   * @param enabled {@code true} to auto-install into AdvantageScope on startup.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withAutoInstallToAdvantageScope(boolean enabled) {
+    this.autoInstallToAdvantageScope = enabled;
+    return this;
+  }
+
+  /**
+   * Automatically shifts the chassis CAD vertical zero position by {@code -chassisBounds.minZ()} in
+   * exported AdvantageScope {@code config.json} files so the lowest point of the chassis sits flush
+   * at {@code z = 0.0} on the field carpet.
+   *
+   * @return This config for chaining.
+   */
+  public CadRobotConfig autoGroundChassis() {
+    this.autoGroundChassis = true;
+    return this;
+  }
+
+  /**
+   * Enables or disables automatic chassis vertical grounding in exported AdvantageScope configs.
+   *
+   * @param enabled {@code true} to shift chassis {@code minZ} to {@code 0.0}.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withAutoGroundChassis(boolean enabled) {
+    this.autoGroundChassis = enabled;
     return this;
   }
 
@@ -223,9 +325,19 @@ public final class CadRobotConfig {
     return Optional.ofNullable(advantageScopeOutputDir);
   }
 
-  /** @return Legal extension envelope, if configured. */
+  /** @return Explicit legal extension envelope, if configured. */
   public Optional<BoundingBox3d> getExtensionEnvelope() {
     return Optional.ofNullable(extensionEnvelope);
+  }
+
+  /** @return Auto-derived extension horizontal margin in meters, if configured. */
+  public OptionalDouble getExtensionXyMarginMeters() {
+    return extensionXyMarginMeters;
+  }
+
+  /** @return Auto-derived extension maximum height in meters, if configured. */
+  public OptionalDouble getExtensionMaxHeightMeters() {
+    return extensionMaxHeightMeters;
   }
 
   /** @return {@code true} if collision checking is enabled. */
@@ -233,8 +345,23 @@ public final class CadRobotConfig {
     return collisionCheckingEnabled;
   }
 
+  /** @return {@code true} if resting sibling/chassis OBB overlaps are auto-ignored at startup. */
+  public boolean isIgnoreRestingOverlapsEnabled() {
+    return ignoreRestingOverlaps;
+  }
+
   /** @return {@code true} if AdvantageScope mesh simplification is disabled. */
   public boolean isDisableAdvantageScopeSimplification() {
     return disableAdvantageScopeSimplification;
+  }
+
+  /** @return {@code true} if automatic installation into AdvantageScope User Assets is enabled. */
+  public boolean isAutoInstallToAdvantageScopeEnabled() {
+    return autoInstallToAdvantageScope;
+  }
+
+  /** @return {@code true} if automatic chassis Z-grounding is enabled. */
+  public boolean isAutoGroundChassisEnabled() {
+    return autoGroundChassis;
   }
 }

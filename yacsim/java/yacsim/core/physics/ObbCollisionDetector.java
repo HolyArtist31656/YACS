@@ -4,6 +4,7 @@
 
 package yacsim.core.physics;
 
+import java.util.List;
 import java.util.OptionalDouble;
 import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation3d;
@@ -86,6 +87,53 @@ public final class ObbCollisionDetector {
       maxViolation = Math.max(maxViolation, corner.getY() - allowedEnvelope.maxY());
       maxViolation = Math.max(maxViolation, allowedEnvelope.minZ() - corner.getZ());
       maxViolation = Math.max(maxViolation, corner.getZ() - allowedEnvelope.maxZ());
+    }
+    return maxViolation > 1e-6 ? OptionalDouble.of(maxViolation) : OptionalDouble.empty();
+  }
+
+
+  /**
+   * Tests two multi-primitive OBB collections for overlap, returning the maximum penetration depth
+   * among any colliding sub-box pair.
+   *
+   * @param boxesA Local sub-bounding boxes for component A.
+   * @param poseA World/robot-frame pose of component A.
+   * @param boxesB Local sub-bounding boxes for component B.
+   * @param poseB World/robot-frame pose of component B.
+   * @return Maximum penetration depth in meters if any sub-box pair overlaps, or empty if all are
+   *     separated.
+   */
+  public static OptionalDouble testMultiObbCollision(
+      List<BoundingBox3d> boxesA, Pose3d poseA, List<BoundingBox3d> boxesB, Pose3d poseB) {
+    double maxPenetration = -1.0;
+    for (BoundingBox3d a : boxesA) {
+      for (BoundingBox3d b : boxesB) {
+        OptionalDouble hit = testObbCollision(a, poseA, b, poseB);
+        if (hit.isPresent()) {
+          maxPenetration = Math.max(maxPenetration, hit.getAsDouble());
+        }
+      }
+    }
+    return maxPenetration >= 0.0 ? OptionalDouble.of(maxPenetration) : OptionalDouble.empty();
+  }
+
+  /**
+   * Tests whether any sub-bounding box in {@code boxes} breaches {@code allowedEnvelope}.
+   *
+   * @param boxes Local sub-bounding boxes for the component.
+   * @param componentPose Robot-frame pose of the component.
+   * @param allowedEnvelope Legal axis-aligned extension envelope in meters.
+   * @return Maximum violation distance in meters if breached, or empty if all sub-boxes are within
+   *     bounds.
+   */
+  public static OptionalDouble testMultiEnvelopeViolation(
+      List<BoundingBox3d> boxes, Pose3d componentPose, BoundingBox3d allowedEnvelope) {
+    double maxViolation = 0.0;
+    for (BoundingBox3d box : boxes) {
+      OptionalDouble v = testEnvelopeViolation(box, componentPose, allowedEnvelope);
+      if (v.isPresent()) {
+        maxViolation = Math.max(maxViolation, v.getAsDouble());
+      }
     }
     return maxViolation > 1e-6 ? OptionalDouble.of(maxViolation) : OptionalDouble.empty();
   }

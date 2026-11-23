@@ -6,6 +6,7 @@ package yacsim.core.physics;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.OptionalDouble;
 import org.junit.jupiter.api.Test;
 import org.wpilib.math.geometry.Pose3d;
@@ -45,6 +46,30 @@ class ObbCollisionDetectorTest {
     assertTrue(
         ObbCollisionDetector.testEnvelopeViolation(
                 carriage, new Pose3d(new Translation3d(0.0, 0.0, 1.75), new Rotation3d()), allowed)
+            .isPresent());
+  }
+
+  @Test
+  void multiObbEliminatesFalsePositiveInsideLShapedCavity() {
+    // L-shaped frame: bottom rail [0..1, 0..0.1, 0..0.1] + vertical post [0..0.1, 0..0.1, 0..1]
+    List<BoundingBox3d> lBracket =
+        List.of(
+            new BoundingBox3d(0.0, 0.0, 0.0, 1.0, 0.1, 0.1),
+            new BoundingBox3d(0.0, 0.0, 0.0, 0.1, 0.1, 1.0));
+    // Outer enclosing box would cover [0..1, 0..0.1, 0..1] and falsely hit a part sitting in the
+    // cavity
+    BoundingBox3d partInCavity = new BoundingBox3d(0.4, 0.0, 0.4, 0.6, 0.1, 0.6);
+
+    assertTrue(
+        ObbCollisionDetector.testMultiObbCollision(
+                lBracket, new Pose3d(), List.of(partInCavity), new Pose3d())
+            .isEmpty());
+
+    // Moving the part onto the bottom rail triggers a real hit
+    BoundingBox3d partOnRail = new BoundingBox3d(0.4, 0.0, 0.02, 0.6, 0.1, 0.15);
+    assertTrue(
+        ObbCollisionDetector.testMultiObbCollision(
+                lBracket, new Pose3d(), List.of(partOnRail), new Pose3d())
             .isPresent());
   }
 }

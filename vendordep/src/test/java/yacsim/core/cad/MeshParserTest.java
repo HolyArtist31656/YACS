@@ -128,6 +128,45 @@ class MeshParserTest {
     assertEquals(2_104_546, meta.triangleCount());
   }
 
+  @Test
+  void extractsPerPrimitiveSubBoundsForLShapedGlb(@TempDir Path tempDir) throws IOException {
+    String gltfJson =
+        """
+        {
+          "asset": {"version": "2.0"},
+          "accessors": [
+            {"count": 36, "type": "SCALAR", "componentType": 5123},
+            {"count": 8, "type": "VEC3", "componentType": 5126, "min": [0.0, 0.0, 0.0], "max": [1.0, 0.1, 0.1]},
+            {"count": 8, "type": "VEC3", "componentType": 5126, "min": [0.0, 0.0, 0.0], "max": [0.1, 0.1, 1.0]}
+          ],
+          "meshes": [
+            {
+              "primitives": [
+                {"attributes": {"POSITION": 1}, "indices": 0},
+                {"attributes": {"POSITION": 2}, "indices": 0}
+              ]
+            }
+          ]
+        }
+        """;
+    byte[] jsonBytes = padTo4Bytes(gltfJson.getBytes(StandardCharsets.UTF_8));
+    ByteBuffer glb = ByteBuffer.allocate(20 + jsonBytes.length).order(ByteOrder.LITTLE_ENDIAN);
+    glb.putInt(0x46546C67);
+    glb.putInt(2);
+    glb.putInt(20 + jsonBytes.length);
+    glb.putInt(jsonBytes.length);
+    glb.putInt(0x4E4F534A);
+    glb.put(jsonBytes);
+
+    Path glbFile = tempDir.resolve("l_bracket.glb");
+    Files.write(glbFile, glb.array());
+
+    MeshMetadata meta = MeshParser.parse(new CadAssetConfig(glbFile));
+    assertEquals(2, meta.collisionSubBounds().size());
+    assertEquals(1.0, meta.localBounds().maxX(), 1e-6);
+    assertEquals(1.0, meta.localBounds().maxZ(), 1e-6);
+  }
+
   private static byte[] padTo4Bytes(byte[] raw) {
     int rem = raw.length % 4;
     if (rem == 0) return raw;
