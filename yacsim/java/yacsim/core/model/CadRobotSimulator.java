@@ -22,6 +22,11 @@ import yacsim.core.physics.CadMassProperties;
 import yacsim.core.physics.CollisionEvent;
 import yacsim.core.physics.ObbCollisionDetector;
 
+/**
+ * Core thread-safe 3D CAD simulation engine. Uses a lock-free {@code volatile SimSnapshot} record
+ * so {@link #simIterate()} can run on a high-rate {@code Notifier} thread while {@link
+ * #updateTelemetry()} publishes consistent snapshots on the 50 Hz main robot thread.
+ */
 public final class CadRobotSimulator implements AutoCloseable {
   private record SimSnapshot(
       Pose2d robotPose2d,
@@ -36,6 +41,14 @@ public final class CadRobotSimulator implements AutoCloseable {
   private volatile SimSnapshot latestSnapshot;
   private AdvantageScopePublisher publisher;
 
+  /**
+   * Parses all configured CAD meshes, optionally exports an AdvantageScope asset bundle, and
+   * initializes NetworkTables publishing.
+   *
+   * @param config Robot CAD configuration.
+   * @param enableNetworkTables {@code true} to publish NT4 telemetry, {@code false} for headless unit tests.
+   * @throws IOException If parsing a mesh or exporting the AdvantageScope bundle fails.
+   */
   public CadRobotSimulator(CadRobotConfig config, boolean enableNetworkTables) throws IOException {
     this.config = config;
     this.allComponents = config.getAllArticulatedComponents();
@@ -60,10 +73,20 @@ public final class CadRobotSimulator implements AutoCloseable {
     }
   }
 
+  /**
+   * Creates a simulator with NetworkTables telemetry enabled.
+   *
+   * @param config Robot CAD configuration.
+   * @throws IOException If parsing a mesh or exporting the AdvantageScope bundle fails.
+   */
   public CadRobotSimulator(CadRobotConfig config) throws IOException {
     this(config, true);
   }
 
+  /**
+   * Samples all pose suppliers, runs OBB collision and envelope checks, and atomically publishes a
+   * new immutable simulation snapshot.
+   */
   public void simIterate() {
     Pose2d robotPose2d = config.getDrivetrainPoseSupplier().get();
     Pose3d robotPose3d =
@@ -80,6 +103,7 @@ public final class CadRobotSimulator implements AutoCloseable {
         new SimSnapshot(robotPose2d, robotPose3d, poses, List.copyOf(collisions));
   }
 
+  /** Publishes the latest immutable simulation snapshot to NetworkTables if enabled. */
   public void updateTelemetry() {
     if (publisher != null) {
       SimSnapshot snap = this.latestSnapshot;
@@ -148,38 +172,63 @@ public final class CadRobotSimulator implements AutoCloseable {
         || b.getParentComponentName().map(p -> p.equals(a.getName())).orElse(false);
   }
 
+  /** @return Parsed chassis {@link MeshMetadata}, if a chassis asset is configured. */
   public Optional<MeshMetadata> getChassisMetadata() {
     return Optional.ofNullable(chassisMetadata);
   }
 
+  /**
+   * Returns parsed {@link MeshMetadata} for a named articulated component.
+   *
+   * @param name Component name.
+   * @return Metadata if the component exists.
+   */
   public Optional<MeshMetadata> getComponentMetadata(String name) {
     return Optional.ofNullable(componentMetadata.get(name));
   }
 
+  /**
+   * Returns mass and inertia properties for a named articulated component.
+   *
+   * @param name Component name.
+   * @return Mass properties if the component exists.
+   */
   public Optional<CadMassProperties> getComponentMassProperties(String name) {
     return getComponentMetadata(name).map(MeshMetadata::massProperties);
   }
 
+  /** @return Latest sampled 2D field pose. */
   public Pose2d getLatestRobotPose2d() {
     return latestSnapshot.robotPose2d();
   }
 
+  /** @return Latest sampled 3D field pose. */
   public Pose3d getLatestRobotPose3d() {
     return latestSnapshot.robotPose3d();
   }
 
+  /** @return Defensive copy of the latest articulated component poses. */
   public Pose3d[] getLatestComponentPoses() {
     return latestSnapshot.componentPoses().clone();
   }
 
+  /** @return Immutable list of collisions detected on the latest iteration. */
   public List<CollisionEvent> getLatestCollisions() {
     return latestSnapshot.collisions();
   }
 
+  /** @return {@code true} if any collision or envelope violation is active. */
   public boolean hasAnyCollision() {
     return !latestSnapshot.collisions().isEmpty();
   }
 
+  /**
+   * Checks whether the two named components collided on the latest iteration (order-independent).
+   *
+   * @param a First component name.
+   * @param b Second component name.
+   * @return {@code true} if a collision event involves both names.
+   */
   public boolean hasCollisionBetween(String a, String b) {
     return latestSnapshot.collisions().stream()
         .anyMatch(
@@ -188,10 +237,12 @@ public final class CadRobotSimulator implements AutoCloseable {
                     || (ev.componentA().equals(b) && ev.componentB().equals(a)));
   }
 
+  /** @return {@code true} if any component breached {@code "ExtensionEnvelope"} on the latest iteration. */
   public boolean hasExtensionViolation() {
     return latestSnapshot.collisions().stream().anyMatch(ev -> ev.involves("ExtensionEnvelope"));
   }
 
+  /** @return Sum of triangle counts across the chassis and all articulated components. */
   public int getTotalTriangleCount() {
     int total = chassisMetadata != null ? chassisMetadata.triangleCount() : 0;
     for (MeshMetadata meta : componentMetadata.values()) {
@@ -200,6 +251,7 @@ public final class CadRobotSimulator implements AutoCloseable {
     return total;
   }
 
+  /** Closes NetworkTables publishers owned by this simulator. */
   @Override
   public void close() {
     if (publisher != null) {

@@ -9,9 +9,20 @@ import java.util.function.Supplier;
 import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Transform3d;
 
+/**
+ * Pose-supplier composition helpers for bridging YAMS mechanism kinematics to YACSim articulated
+ * CAD components.
+ */
 public final class YamsMechanismBridge {
   private YamsMechanismBridge() {}
 
+  /**
+   * Applies a fixed CAD mounting offset transform to a mechanism pose supplier.
+   *
+   * @param yamsPoseSupplier Supplier returning the mechanism's simulated {@link Pose3d}.
+   * @param cadMountOffset Fixed transform from mechanism origin to CAD mesh origin.
+   * @return Composed {@link Pose3d} supplier.
+   */
   public static Supplier<Pose3d> fromPoseSupplier(
       Supplier<Pose3d> yamsPoseSupplier, Transform3d cadMountOffset) {
     Objects.requireNonNull(yamsPoseSupplier);
@@ -19,6 +30,14 @@ public final class YamsMechanismBridge {
     return () -> yamsPoseSupplier.get().transformBy(cadMountOffset);
   }
 
+  /**
+   * Chains a moving parent mechanism's pose with a child mechanism's local pose (for example, a
+   * wrist mounted on an elevator carriage).
+   *
+   * @param parentPoseSupplier Supplier returning the parent mechanism's {@link Pose3d}.
+   * @param childLocalPoseSupplier Supplier returning the child's local {@link Pose3d} relative to the parent.
+   * @return Composed robot-relative {@link Pose3d} supplier for the child.
+   */
   public static Supplier<Pose3d> chainParentChild(
       Supplier<Pose3d> parentPoseSupplier, Supplier<Pose3d> childLocalPoseSupplier) {
     Objects.requireNonNull(parentPoseSupplier);

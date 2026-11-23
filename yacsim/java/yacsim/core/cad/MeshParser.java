@@ -21,12 +21,25 @@ import yacsim.core.physics.BoundingBox3d;
 import yacsim.core.physics.CadMassProperties;
 import yacsim.core.util.MinimalJson;
 
+/**
+ * Zero-dependency CAD mesh parser supporting header-only glTF 2.0 ({@code .glb}/{@code .gltf})
+ * plus streaming Wavefront {@code .obj} and ASCII/binary {@code .stl} files.
+ */
 public final class MeshParser {
   private static final int GLB_MAGIC = 0x46546C67;
   private static final int GLB_JSON_CHUNK = 0x4E4F534A;
 
   private MeshParser() {}
 
+  /**
+   * Parses the CAD asset described by {@code config} and returns its bounding box, triangle count,
+   * and mass properties.
+   *
+   * @param config Asset configuration specifying mesh path, unit scale, density, and triangle budget.
+   * @return Extracted {@link MeshMetadata}.
+   * @throws IOException If reading the mesh file fails.
+   * @throws CadMeshValidationException If the file is missing, malformed, or exceeds budget for CPU-parsed formats.
+   */
   public static MeshMetadata parse(CadAssetConfig config) throws IOException {
     Path path = config.getMeshPath();
     if (!Files.exists(path)) throw new CadMeshValidationException("CAD mesh file not found: " + path);

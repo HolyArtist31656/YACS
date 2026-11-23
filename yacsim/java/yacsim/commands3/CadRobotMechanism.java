@@ -18,20 +18,47 @@ public class CadRobotMechanism implements AutoCloseable {
   private final Mechanism mechanism;
   private final CadRobotSimulator simulator;
 
+  /**
+   * Constructs a Commands v3 CAD robot mechanism and initializes a new {@link CadRobotSimulator}
+   * with NetworkTables publishing enabled.
+   *
+   * @param mechanism The owning WPILib Commands v3 {@link Mechanism}.
+   * @param config The robot CAD and collision configuration.
+   * @throws IOException If any configured CAD mesh file cannot be read or exported.
+   */
   public CadRobotMechanism(Mechanism mechanism, CadRobotConfig config) throws IOException {
     this(mechanism, new CadRobotSimulator(config));
   }
 
+  /**
+   * Constructs a Commands v3 CAD robot mechanism wrapping an existing {@link CadRobotSimulator}.
+   *
+   * @param mechanism The owning WPILib Commands v3 {@link Mechanism}.
+   * @param simulator Pre-configured simulator instance.
+   */
   public CadRobotMechanism(Mechanism mechanism, CadRobotSimulator simulator) {
     this.mechanism = mechanism;
     this.simulator = simulator;
   }
 
+  /** Publishes the latest simulation snapshot to NetworkTables. Call from {@code robotPeriodic()}. */
   public void periodic() { simulator.updateTelemetry(); }
+  /** Steps pose suppliers and OBB collision checks. Safe to call from {@code simulationPeriodic()} or a {@code Notifier}. */
   public void simulationPeriodic() { simulator.simIterate(); }
+  /**
+   * Returns the owning WPILib Commands v3 mechanism.
+   *
+   * @return The owning {@link Mechanism}.
+   */
   public Mechanism getMechanism() { return mechanism; }
+  /**
+   * Returns the underlying CAD simulator.
+   *
+   * @return The {@link CadRobotSimulator} instance.
+   */
   public CadRobotSimulator getSimulator() { return simulator; }
 
+  /** Closes underlying NetworkTables publishers. */
   @Override
   public void close() { simulator.close(); }
 }

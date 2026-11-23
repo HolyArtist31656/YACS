@@ -9,11 +9,25 @@ import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Translation3d;
 
+/**
+ * 15-axis Separating Axis Theorem (SAT) collision detector for oriented bounding boxes (OBBs) and
+ * robot extension envelopes.
+ */
 public final class ObbCollisionDetector {
   private static final double EPSILON = 1e-9;
 
   private ObbCollisionDetector() {}
 
+  /**
+   * Tests two posed local bounding boxes for 3D OBB overlap using the 15-axis Separating Axis
+   * Theorem.
+   *
+   * @param boxA Local bounds of component A.
+   * @param poseA World/robot-frame pose of component A.
+   * @param boxB Local bounds of component B.
+   * @param poseB World/robot-frame pose of component B.
+   * @return Minimum penetration depth in meters if overlapping, or empty if separated.
+   */
   public static OptionalDouble testObbCollision(
       BoundingBox3d boxA, Pose3d poseA, BoundingBox3d boxB, Pose3d poseB) {
     Translation3d centerA = boxA.center().rotateBy(poseA.getRotation()).plus(poseA.getTranslation());
@@ -53,6 +67,15 @@ public final class ObbCollisionDetector {
     return OptionalDouble.of(minOverlap);
   }
 
+  /**
+   * Tests whether any transformed corner of a posed bounding box breaches an allowed axis-aligned
+   * extension envelope.
+   *
+   * @param componentBox Local bounds of the component.
+   * @param componentPose Robot-frame pose of the component.
+   * @param allowedEnvelope Legal axis-aligned extension envelope in meters.
+   * @return Maximum violation distance in meters if breached, or empty if within bounds.
+   */
   public static OptionalDouble testEnvelopeViolation(
       BoundingBox3d componentBox, Pose3d componentPose, BoundingBox3d allowedEnvelope) {
     double maxViolation = 0.0;

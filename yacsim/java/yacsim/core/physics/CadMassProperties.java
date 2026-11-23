@@ -6,6 +6,16 @@ package yacsim.core.physics;
 
 import org.wpilib.math.geometry.Translation3d;
 
+/**
+ * Immutable mass, center of mass, and principal moments of inertia for a CAD component.
+ *
+ * @param volumeCubicMeters Volume in m³.
+ * @param massKilograms Mass in kg.
+ * @param centerOfMassMeters Center of mass in meters.
+ * @param ixxKgM2 Moment of inertia about X in kg·m².
+ * @param iyyKgM2 Moment of inertia about Y in kg·m².
+ * @param izzKgM2 Moment of inertia about Z in kg·m².
+ */
 public record CadMassProperties(
     double volumeCubicMeters,
     double massKilograms,
@@ -14,6 +24,12 @@ public record CadMassProperties(
     double iyyKgM2,
     double izzKgM2) {
 
+  /**
+   * Returns a copy scaled to {@code targetMassKg}, scaling principal inertia values proportionally.
+   *
+   * @param targetMassKg Positive target mass in kilograms.
+   * @return Scaled {@link CadMassProperties}.
+   */
   public CadMassProperties withTotalMassKg(double targetMassKg) {
     if (targetMassKg <= 0.0) throw new IllegalArgumentException("Target mass must be positive.");
     if (massKilograms <= 0.0) {
@@ -25,6 +41,13 @@ public record CadMassProperties(
         volumeCubicMeters, targetMassKg, centerOfMassMeters, ixxKgM2 * r, iyyKgM2 * r, izzKgM2 * r);
   }
 
+  /**
+   * Computes uniform-density rectangular prism mass properties from a bounding box.
+   *
+   * @param box Local bounding box in meters.
+   * @param densityKgPerM3 Material density in kg/m³.
+   * @return Estimated {@link CadMassProperties}.
+   */
   public static CadMassProperties fromBoundingBox(BoundingBox3d box, double densityKgPerM3) {
     double lx = Math.max(1e-6, box.sizeX());
     double ly = Math.max(1e-6, box.sizeY());

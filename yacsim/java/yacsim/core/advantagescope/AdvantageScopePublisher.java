@@ -15,6 +15,10 @@ import org.wpilib.networktables.StructArrayPublisher;
 import org.wpilib.networktables.StructPublisher;
 import yacsim.core.physics.CollisionEvent;
 
+/**
+ * Publishes YACSim robot poses, articulated component poses, and OBB collision telemetry to
+ * NetworkTables 4 for live visualization in AdvantageScope.
+ */
 public final class AdvantageScopePublisher implements AutoCloseable {
   private final StructPublisher<Pose2d> robotPosePub;
   private final StructPublisher<Pose3d> robotPose3dPub;
@@ -22,6 +26,11 @@ public final class AdvantageScopePublisher implements AutoCloseable {
   private final BooleanPublisher collisionActivePub;
   private final StringArrayPublisher collisionDetailsPub;
 
+  /**
+   * Opens NetworkTables 4 struct, boolean, and string-array publishers under the given root table.
+   *
+   * @param rootTableName Root NetworkTables table name (for example {@code "YACSim"}).
+   */
   public AdvantageScopePublisher(String rootTableName) {
     NetworkTable table = NetworkTableInstance.getDefault().getTable(rootTableName);
     this.robotPosePub = table.getStructTopic("RobotPose", Pose2d.struct).publish();
@@ -31,6 +40,14 @@ public final class AdvantageScopePublisher implements AutoCloseable {
     this.collisionDetailsPub = table.getStringArrayTopic("CollisionDetails").publish();
   }
 
+  /**
+   * Publishes a consistent simulation frame to NetworkTables.
+   *
+   * @param robotPose 2D robot field pose.
+   * @param robotPose3d 3D robot field pose including gyro pitch and roll.
+   * @param componentPoses Array of articulated component poses in registration order.
+   * @param collisions Active collision events for this frame.
+   */
   public void publish(
       Pose2d robotPose, Pose3d robotPose3d, Pose3d[] componentPoses, List<CollisionEvent> collisions) {
     robotPosePub.set(robotPose);
@@ -45,6 +62,7 @@ public final class AdvantageScopePublisher implements AutoCloseable {
     collisionDetailsPub.set(details);
   }
 
+  /** Closes all NetworkTables publishers owned by this instance. */
   @Override
   public void close() {
     robotPosePub.close();

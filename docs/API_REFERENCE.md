@@ -93,7 +93,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `withUnitScaleToMeters(double scale)` / `withMillimeterUnits()` / `withInchUnits()` | Converts non-meter CAD exports into meters. |
 | `withMaterialDensity(double kgPerM3)` / `withMassOverrideKg(double massKg)` | Controls computed `CadMassProperties`. |
 | `withZeroedPosition(Translation3d pos)` | AdvantageScope `position` offset in meters. |
-| `withZeroedRotationAxis(String axis, double degrees)` | Appends an ordered `"x"`, `"y"`, or `"z"` rotation to AdvantageScope's `rotations` array. |
+| `addZeroedRotation(String axis, double degrees)` | Appends an ordered `"x"`, `"y"`, or `"z"` rotation to AdvantageScope's `rotations` array. |
 | `withZeroedRotation(Rotation3d rot)` / `withZeroedRotation(double rollDeg, double pitchDeg, double yawDeg)` | Sets X/Y/Z zeroed rotations. |
 | `withMaxTriangleBudget(int maxTriangles)` | Raises/lowers triangle validation threshold. |
 

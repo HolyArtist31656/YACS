@@ -21,9 +21,19 @@ import yacsim.core.model.CadComponentConfig;
 import yacsim.core.model.CadRobotConfig;
 import yacsim.core.util.MinimalJson;
 
+/**
+ * Generates AdvantageScope {@code config.json} files and complete {@code Robot_<Name>} custom asset
+ * bundles from a {@link CadRobotConfig}.
+ */
 public final class AdvantageScopeConfigGenerator {
   private AdvantageScopeConfigGenerator() {}
 
+  /**
+   * Builds the AdvantageScope {@code config.json} payload for the given robot configuration.
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @return Pretty-printed JSON string ready to write as {@code config.json}.
+   */
   public static String buildConfigJson(CadRobotConfig robotConfig) {
     Map<String, Object> root = new LinkedHashMap<>();
     root.put("name", robotConfig.getRobotName());
@@ -49,6 +59,15 @@ public final class AdvantageScopeConfigGenerator {
     return MinimalJson.toPrettyJson(root);
   }
 
+  /**
+   * Exports a ready-to-load {@code Robot_<Name>} AdvantageScope directory containing {@code
+   * config.json}, {@code model.glb}, and {@code model_0.glb..model_N.glb}.
+   *
+   * @param robotConfig The robot CAD configuration.
+   * @param parentAssetsDir Parent directory in which {@code Robot_<Name>} will be created.
+   * @return Path to the generated {@code Robot_<Name>} directory.
+   * @throws IOException If creating directories or copying mesh files fails.
+   */
   public static Path exportAssetBundle(CadRobotConfig robotConfig, Path parentAssetsDir)
       throws IOException {
     String safeName = robotConfig.getRobotName().replaceAll("[^A-Za-z0-9_-]", "_");

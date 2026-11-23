@@ -23,13 +23,13 @@ By default, `CadAssetConfig` enforces a `150,000` triangle budget (`DEFAULT_MAX_
 
 `AdvantageScopeConfigGenerator.exportAssetBundle(config, outputDir)` writes a complete `Robot_<Name>/` directory containing `config.json`, `model.glb`, and `model_0.glb` … `model_N.glb`.
 
-When CAD exports need sequential axis rotations to align with WPILib's NWU coordinate system (matching AdvantageScope's `rotations` array), chain `withZeroedRotationAxis(axis, degrees)` in exact application order:
+When CAD exports need sequential axis rotations to align with WPILib's NWU coordinate system (matching AdvantageScope's `rotations` array), chain `addZeroedRotation(axis, degrees)` in exact application order:
 
 ```java
 CadAssetConfig chassis =
     new CadAssetConfig(models.resolve("chassis.glb"))
-        .withZeroedRotationAxis("x", 90.0)
-        .withZeroedRotationAxis("z", 180.0)
+        .addZeroedRotation("x", 90.0)
+        .addZeroedRotation("z", 180.0)
         .withZeroedPosition(new Translation3d(0.0, 0.0, 0.05));
 ```
 

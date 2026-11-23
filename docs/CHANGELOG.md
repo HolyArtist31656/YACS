@@ -9,7 +9,7 @@ All notable changes to YACSim are documented here.
   - Header-only `.glb`/`.gltf` and streaming `.obj`/`.stl` parser (`MeshParser`) with bounding-box, triangle-count, and `CadMassProperties` extraction.
   - 15-axis Separating Axis Theorem OBB collision detector (`ObbCollisionDetector`) supporting component-to-component, component-to-chassis, and `ExtensionEnvelope` checks.
   - Symmetric `CadRobotConfig.ignoreCollisionPair(componentA, componentB)` supporting sibling mechanisms, `"Chassis"`, and `"ExtensionEnvelope"`.
-  - Ordered multi-axis zeroed rotations (`CadAssetConfig.withZeroedRotationAxis(axis, degrees)`) exported verbatim to AdvantageScope `config.json`.
+  - Ordered multi-axis zeroed rotations (`CadAssetConfig.addZeroedRotation(axis, degrees)`) exported verbatim to AdvantageScope `config.json`.
   - `YamsMechanismBridge` and `YamsDrivetrainBridge` for YAMS 2027 mechanisms and swerve drivetrains.
   - Lock-free `volatile SimSnapshot` threading between `simIterate()` and `updateTelemetry()`.
   - Zero-dependency `MinimalJson` parser and pretty-printer.

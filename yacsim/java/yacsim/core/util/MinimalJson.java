@@ -9,10 +9,20 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** Zero-dependency JSON parser and pretty-printer in pure Java 25. */
+/**
+ * Zero-dependency recursive-descent JSON parser and pretty-printer used for glTF 2.0 chunks and
+ * AdvantageScope {@code config.json} generation.
+ */
 public final class MinimalJson {
   private MinimalJson() {}
 
+  /**
+   * Parses a JSON string into Java {@code Map}, {@code List}, {@code String}, {@code Number},
+   * {@code Boolean}, or {@code null} values.
+   *
+   * @param json Raw JSON text.
+   * @return Parsed Java value tree.
+   */
   public static Object parse(String json) {
     Parser parser = new Parser(json);
     Object value = parser.parseValue();
@@ -24,6 +34,13 @@ public final class MinimalJson {
     return value;
   }
 
+  /**
+   * Serializes a Java value tree ({@code Map}, {@code List}, primitives, {@code null}) to
+   * indented JSON.
+   *
+   * @param value Root Java value.
+   * @return Pretty-printed JSON string.
+   */
   public static String toPrettyJson(Object value) {
     StringBuilder sb = new StringBuilder();
     writeValue(sb, value, 0);

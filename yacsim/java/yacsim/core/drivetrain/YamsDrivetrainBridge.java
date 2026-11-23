@@ -13,9 +13,24 @@ import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.math.kinematics.SwerveModulePosition;
 import yacsim.core.cad.CadAssetConfig;
 
+/** Factory helpers for bridging a YAMS swerve drivetrain directly into {@link CadDrivetrainConfig}. */
 public final class YamsDrivetrainBridge {
   private YamsDrivetrainBridge() {}
 
+  /**
+   * Builds a {@link CadDrivetrainConfig} wired to a YAMS swerve drivetrain's pose, gyro, and
+   * module position suppliers.
+   *
+   * @param chassisAsset Chassis CAD mesh asset.
+   * @param steerForkAsset Optional shared steer-fork CAD asset (may be {@code null}).
+   * @param wheelAsset Optional shared wheel CAD asset (may be {@code null}).
+   * @param wheelRadiusMeters Positive wheel radius in meters.
+   * @param moduleLocations Module mounting locations in chassis frame (typically FL, FR, BL, BR).
+   * @param fieldPoseSupplier Supplier returning the robot's 2D field pose.
+   * @param gyroRotation3dSupplier Supplier returning 3D gyro orientation.
+   * @param modulePositionsSupplier Supplier returning current {@link SwerveModulePosition} array.
+   * @return Configured {@link CadDrivetrainConfig}.
+   */
   public static CadDrivetrainConfig fromYamsSwerve(
       CadAssetConfig chassisAsset,
       CadAssetConfig steerForkAsset,
