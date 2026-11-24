@@ -232,4 +232,56 @@ public record CadRobotManifest(
             + joint.childLink()
             + "' has no CAD massProperties.");
   }
+
+  /**
+   * Returns the CAD-extracted mass of {@code linkName} if present and positive, or {@code fallback}
+   * if the link or its CAD mass properties are missing (common in lightweight URDFs without
+   * materials assigned).
+   *
+   * @param linkName Link name to look up.
+   * @param fallback Fallback {@link Mass} returned when CAD mass is absent.
+   * @return CAD link mass or {@code fallback}.
+   */
+  public Mass getLinkMassOr(String linkName, Mass fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return findLink(linkName)
+        .flatMap(CadLinkManifest::massProperties)
+        .filter(mp -> mp.massKilograms() > 0.0)
+        .map(mp -> Kilograms.of(mp.massKilograms()))
+        .orElse(fallback);
+  }
+
+  /**
+   * Resolves the CAD moment of inertia about {@code jointName}'s motion axis, or returns {@code
+   * fallback} if the joint or its child link omits CAD inertia properties.
+   *
+   * @param jointName Joint name to inspect.
+   * @param fallback Fallback {@link MomentOfInertia} returned when CAD inertia is absent.
+   * @return CAD axis moment of inertia or {@code fallback}.
+   */
+  public MomentOfInertia getJointMomentOfInertiaOr(String jointName, MomentOfInertia fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    Optional<CadJointManifest> optJoint = findJoint(jointName);
+    if (optJoint.isEmpty()) {
+      return fallback;
+    }
+    CadJointManifest joint = optJoint.get();
+    if (joint.momentOfInertiaKgM2().isPresent() && joint.momentOfInertiaKgM2().getAsDouble() > 0.0) {
+      return KilogramSquareMeters.of(joint.momentOfInertiaKgM2().getAsDouble());
+    }
+    Optional<CadLinkManifest> child = findLink(joint.childLink());
+    if (child.isPresent() && child.get().massProperties().isPresent() && joint.axis() != null) {
+      CadMassProperties mp = child.get().massProperties().get();
+      double inertia =
+          switch (joint.axis()) {
+            case X -> mp.ixxKgM2();
+            case Y -> mp.iyyKgM2();
+            case Z -> mp.izzKgM2();
+          };
+      if (inertia > 0.0) {
+        return KilogramSquareMeters.of(inertia);
+      }
+    }
+    return fallback;
+  }
 }

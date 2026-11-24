@@ -4,15 +4,27 @@
 
 package yacsim.commands3;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.Optional;
 import java.util.Objects;
 import java.util.function.Supplier;
+import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
+import org.wpilib.math.kinematics.SwerveModulePosition;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import yacsim.core.manifest.CadJointManifest;
+import yacsim.core.manifest.CadJointType;
+import yacsim.core.manifest.CadLinkManifest;
 import yacsim.core.manifest.CadRobotManifest;
+import yacsim.core.manifest.YacSimDiagnostic;
 import yacsim.core.model.CadRobotConfig;
 import yacsim.core.yams.MotionAxis;
 import yacsim.core.yams.YamsMechanismBridge;
@@ -294,6 +306,102 @@ public final class YamsCommands3Bridge {
   }
 
   /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Arm}'s native {@code
+   * getPose3d()}, eliminating duplicate pivot/axis entry when YAMS already knows the mechanism
+   * geometry.
+   *
+   * @param arm YAMS {@link Arm} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Arm arm) {
+    return fromYamsMechanism(arm, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Arm}'s native {@code
+   * getPose3d()} with a fixed CAD mount offset.
+   *
+   * @param arm YAMS {@link Arm} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Arm arm, Transform3d cadMountOffset) {
+    Objects.requireNonNull(arm, "arm");
+    return YamsMechanismBridge.fromPoseSupplier(arm::getPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Elevator}'s native {@code
+   * getPose3d()}.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Elevator elevator) {
+    return fromYamsMechanism(elevator, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Elevator}'s native {@code
+   * getPose3d()} with a fixed CAD mount offset.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Elevator elevator, Transform3d cadMountOffset) {
+    Objects.requireNonNull(elevator, "elevator");
+    return YamsMechanismBridge.fromPoseSupplier(elevator::getPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Pivot}'s native {@code
+   * getPose3d()}.
+   *
+   * @param pivot YAMS {@link Pivot} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Pivot pivot) {
+    return fromYamsMechanism(pivot, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link Pivot}'s native {@code
+   * getPose3d()} with a fixed CAD mount offset.
+   *
+   * @param pivot YAMS {@link Pivot} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(Pivot pivot, Transform3d cadMountOffset) {
+    Objects.requireNonNull(pivot, "pivot");
+    return YamsMechanismBridge.fromPoseSupplier(pivot::getPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link FlyWheel}'s native {@code
+   * getPose3d()}.
+   *
+   * @param flywheel YAMS {@link FlyWheel} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(FlyWheel flywheel) {
+    return fromYamsFlyWheel(flywheel, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link FlyWheel}'s native {@code
+   * getPose3d()} with a fixed CAD mount offset.
+   *
+   * @param flywheel YAMS {@link FlyWheel} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(FlyWheel flywheel, Transform3d cadMountOffset) {
+    return fromYamsFlyWheel(flywheel, cadMountOffset);
+  }
+
+  /**
    * Creates a {@link Pose3d} supplier for a spinning roller, intake bar, or shooter wheel directly
    * from its YAMS {@link SmartMotorController}'s encoder angle ({@code getMechanismPosition()}).
    *
@@ -432,14 +540,15 @@ public final class YamsCommands3Bridge {
     Objects.requireNonNull(config, "config");
     CadRobotManifest manifest = requireManifest(config);
     CadJointManifest joint = manifest.getJoint(jointName);
-    return config.withComponentPoseSupplier(
-        joint.childLink(), poseSupplierFromManifest(manifest, jointName, arm));
+    Supplier<Pose3d> chained =
+        chainFromManifest(config, jointName, poseSupplierFromManifest(manifest, jointName, arm));
+    return config.withComponentPoseSupplier(joint.childLink(), chained);
   }
 
   /**
    * Binds a YAMS {@link Elevator} directly to its child link in a manifest-loaded {@link
    * CadRobotConfig}, reading base origin, axis, orientation, and inversion automatically from the
-   * manifest.
+   * manifest and automatically chaining any parent URDF kinematic links.
    *
    * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
    *     CadRobotConfig#fromUrdf}.
@@ -452,13 +561,15 @@ public final class YamsCommands3Bridge {
     Objects.requireNonNull(config, "config");
     CadRobotManifest manifest = requireManifest(config);
     CadJointManifest joint = manifest.getJoint(jointName);
-    return config.withComponentPoseSupplier(
-        joint.childLink(), poseSupplierFromManifest(manifest, jointName, elevator));
+    Supplier<Pose3d> chained =
+        chainFromManifest(
+            config, jointName, poseSupplierFromManifest(manifest, jointName, elevator));
+    return config.withComponentPoseSupplier(joint.childLink(), chained);
   }
 
   /**
    * Binds a YAMS {@link Pivot} directly to its child link in a manifest-loaded {@link
-   * CadRobotConfig}.
+   * CadRobotConfig}, automatically chaining any parent URDF kinematic links.
    *
    * @param config {@link CadRobotConfig} loaded via {@link CadRobotConfig#fromManifest} or {@link
    *     CadRobotConfig#fromUrdf}.
@@ -471,8 +582,92 @@ public final class YamsCommands3Bridge {
     Objects.requireNonNull(config, "config");
     CadRobotManifest manifest = requireManifest(config);
     CadJointManifest joint = manifest.getJoint(jointName);
-    return config.withComponentPoseSupplier(
-        joint.childLink(), poseSupplierFromManifest(manifest, jointName, pivot));
+    Supplier<Pose3d> chained =
+        chainFromManifest(config, jointName, poseSupplierFromManifest(manifest, jointName, pivot));
+    return config.withComponentPoseSupplier(joint.childLink(), chained);
+  }
+
+  /**
+   * Wraps a joint-local {@link Pose3d} supplier with its full URDF/manifest ancestor kinematic
+   * chain (for example, a shooter hood mounted on a rotating turret with intermediate static links),
+   * resolving the nearest live ancestor component dynamically so binding order never matters.
+   *
+   * @param config Manifest- or URDF-loaded {@link CadRobotConfig}.
+   * @param jointName Name of the joint in the manifest.
+   * @param localJointPoseSupplier Supplier returning the joint's local {@link Pose3d} relative to
+   *     its parent link.
+   * @return Robot-relative {@link Pose3d} supplier incorporating all parent transforms.
+   */
+  public static Supplier<Pose3d> chainFromManifest(
+      CadRobotConfig config, String jointName, Supplier<Pose3d> localJointPoseSupplier) {
+    Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(localJointPoseSupplier, "localJointPoseSupplier");
+    CadRobotManifest manifest = requireManifest(config);
+    CadJointManifest joint = manifest.getJoint(jointName);
+    String chassisName = manifest.chassis().map(CadLinkManifest::name).orElse("Chassis");
+    String parentLink = joint.parentLink();
+    if (parentLink == null
+        || parentLink.isBlank()
+        || parentLink.equals(chassisName)
+        || parentLink.equalsIgnoreCase("Chassis")) {
+      return localJointPoseSupplier;
+    }
+
+    Map<String, CadJointManifest> parentJointByChild = new LinkedHashMap<>();
+    for (CadJointManifest j : manifest.joints()) {
+      parentJointByChild.putIfAbsent(j.childLink(), j);
+    }
+
+    List<CadJointManifest> intermediateJoints = new ArrayList<>();
+    Set<String> visited = new LinkedHashSet<>();
+    String cur = parentLink;
+    String liveAncestorLink = null;
+    while (cur != null
+        && !cur.isBlank()
+        && !cur.equals(chassisName)
+        && !cur.equalsIgnoreCase("Chassis")
+        && visited.add(cur)) {
+      if (config.hasComponent(cur)) {
+        liveAncestorLink = cur;
+        break;
+      }
+      CadJointManifest ancestorJoint = parentJointByChild.get(cur);
+      if (ancestorJoint == null) {
+        break;
+      }
+      intermediateJoints.add(ancestorJoint);
+      cur = ancestorJoint.parentLink();
+    }
+
+    Collections.reverse(intermediateJoints);
+    Pose3d intermediatePose = new Pose3d();
+    for (CadJointManifest j : intermediateJoints) {
+      intermediatePose =
+          intermediatePose.transformBy(new Transform3d(j.originMeters(), j.originRotation()));
+      if (!j.zeroOffset().equals(new Transform3d())) {
+        intermediatePose = intermediatePose.transformBy(j.zeroOffset());
+      }
+    }
+    final Transform3d intermediateTransform =
+        new Transform3d(intermediatePose.getTranslation(), intermediatePose.getRotation());
+    final boolean hasIntermediate = !intermediateJoints.isEmpty();
+
+    if (liveAncestorLink != null) {
+      final String ancestorKey = liveAncestorLink;
+      Supplier<Pose3d> dynamicAncestor =
+          () -> {
+            Pose3d base =
+                config.getComponentPoseSupplier(ancestorKey).map(Supplier::get).orElseGet(Pose3d::new);
+            return hasIntermediate ? base.transformBy(intermediateTransform) : base;
+          };
+      return YamsMechanismBridge.chainParentChild(dynamicAncestor, localJointPoseSupplier);
+    }
+
+    if (hasIntermediate) {
+      final Pose3d fixedPrefix = intermediatePose;
+      return YamsMechanismBridge.chainParentChild(() -> fixedPrefix, localJointPoseSupplier);
+    }
+    return localJointPoseSupplier;
   }
 
   /**
@@ -538,7 +733,12 @@ public final class YamsCommands3Bridge {
                   joint.axis(),
                   joint.inverted())
               : buildRevoluteSupplier(joint, rollerMotor::getMechanismPosition);
-      config.withComponentPoseSupplier(joint.childLink(), poseSupplier);
+      Supplier<Pose3d> finalSupplier =
+          parentPoseSupplier != null
+              ? poseSupplier
+              : chainFromManifest(config, jointName, poseSupplier);
+      boolean allowCollisionReenable = joint.type() != CadJointType.CONTINUOUS;
+      config.withComponentPoseSupplier(joint.childLink(), finalSupplier, allowCollisionReenable);
     }
     return config;
   }
@@ -558,6 +758,195 @@ public final class YamsCommands3Bridge {
           .transformBy(new Transform3d(new Translation3d(), rot))
           .transformBy(joint.zeroOffset());
     };
+  }
+
+  /**
+   * Automatically binds a map of Java mechanism names to YAMS 2027 mechanisms ({@link Arm}, {@link
+   * Elevator}, {@link Pivot}, {@link FlyWheel}, or {@link SmartMotorController}) against a
+   * manifest- or URDF-loaded {@link CadRobotConfig}.
+   *
+   * <p>Never throws if a name is missing from CAD—instead returns a {@link
+   * YacSimDiagnostic.BindingReport} listing every bound mechanism, unmatched Java name, and
+   * unbound CAD joint (with copy-pasteable {@code CadUrdfOptions.withJointAlias(...)} hints).
+   *
+   * @param config {@link CadRobotConfig} loaded from a manifest or URDF.
+   * @param mechanisms Map of {@code mechanismName -> YAMS mechanism or SmartMotorController}.
+   * @return {@link YacSimDiagnostic.BindingReport} summarizing the binding results.
+   */
+  public static YacSimDiagnostic.BindingReport autoBind(
+      CadRobotConfig config, Map<String, Object> mechanisms) {
+    Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(mechanisms, "mechanisms");
+    CadRobotManifest manifest = requireManifest(config);
+
+    List<String> bound = new ArrayList<>();
+    List<String> unmatched = new ArrayList<>();
+
+    for (Map.Entry<String, Object> entry : mechanisms.entrySet()) {
+      String javaName = entry.getKey();
+      Object mech = entry.getValue();
+      if (javaName == null || mech == null) {
+        continue;
+      }
+      Optional<CadJointManifest> optJoint = manifest.findJoint(javaName);
+      if (optJoint.isEmpty()) {
+        unmatched.add(javaName);
+        continue;
+      }
+      CadJointManifest joint = optJoint.get();
+      if (mech instanceof Arm arm) {
+        if (config.hasComponent(joint.childLink())) {
+          bindFromManifest(config, joint.name(), arm);
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
+      } else if (mech instanceof Elevator elevator) {
+        if (config.hasComponent(joint.childLink())) {
+          bindFromManifest(config, joint.name(), elevator);
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
+      } else if (mech instanceof Pivot pivot) {
+        if (config.hasComponent(joint.childLink())) {
+          bindFromManifest(config, joint.name(), pivot);
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
+      } else if (mech instanceof FlyWheel flywheel) {
+        if (config.hasComponent(joint.childLink())) {
+          config.withComponentPoseSupplier(joint.childLink(), fromYamsMechanism(flywheel));
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
+      } else if (mech instanceof SmartMotorController smc) {
+        bindFromManifest(config, joint.name(), smc);
+        bound.add(javaName + " -> " + joint.name());
+      } else {
+        throw new IllegalArgumentException(
+            "Unsupported mechanism type for '"
+                + javaName
+                + "': "
+                + mech.getClass().getName()
+                + " (expected Arm, Elevator, Pivot, FlyWheel, or SmartMotorController).");
+      }
+    }
+
+    List<String> unboundJoints =
+        manifest.joints().stream()
+            .filter(j -> j.type() != CadJointType.FIXED)
+            .filter(j -> !config.isComponentBound(j.childLink()))
+            .map(CadJointManifest::name)
+            .toList();
+
+    StringBuilder summary = new StringBuilder();
+    summary.append(YacSimDiagnostic.formatReport(config));
+    if (!unmatched.isEmpty()) {
+      summary.append("  Unmatched Java mechanisms: ").append(unmatched).append('\n');
+      for (String u : unmatched) {
+        YacSimDiagnostic.suggestBestJointMatch(u, manifest.joints())
+            .ifPresent(
+                cadJoint ->
+                    summary
+                        .append("    Suggested alias: .withJointAlias(\"")
+                        .append(cadJoint)
+                        .append("\", \"")
+                        .append(u)
+                        .append("\")\n"));
+      }
+    }
+    return new YacSimDiagnostic.BindingReport(bound, unmatched, unboundJoints, summary.toString());
+  }
+
+  /**
+   * Attaches animated 4-corner swerve steer forks and spinning wheels from a YAMS {@link
+   * SwerveDrive} directly onto an existing URDF- or manifest-loaded {@link CadRobotConfig},
+   * automatically reusing its configured chassis CAD asset.
+   *
+   * <p>Combine with {@code CadUrdfOptions.recommended().excludeMeshPatterns("MAXSwerve")} if your
+   * CAD chassis contains static simplified swerve blocks that would otherwise overlap the animated
+   * modules.
+   *
+   * @param config Existing {@link CadRobotConfig} with a chassis asset.
+   * @param drive YAMS {@link SwerveDrive} instance.
+   * @param steerForkAsset Optional shared steer-fork CAD asset (may be {@code null}).
+   * @param wheelAsset Optional shared wheel CAD asset (may be {@code null}).
+   * @param wheelRadiusMeters Positive wheel radius in meters.
+   * @param moduleLocations Module mounting locations in chassis frame (typically FL, FR, BL, BR).
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig attachSwerveModules(
+      CadRobotConfig config,
+      SwerveDrive drive,
+      CadAssetConfig steerForkAsset,
+      CadAssetConfig wheelAsset,
+      double wheelRadiusMeters,
+      List<Translation3d> moduleLocations) {
+    Objects.requireNonNull(config, "config");
+    Objects.requireNonNull(drive, "drive");
+    CadAssetConfig chassis =
+        config
+            .getChassisAsset()
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "CadRobotConfig '"
+                            + config.getRobotName()
+                            + "' has no chassis asset. Load a chassis via fromUrdfZip/fromManifest/withChassisAsset first."));
+    CadDrivetrainConfig dt =
+        fromYamsSwerve(
+            drive, chassis, steerForkAsset, wheelAsset, wheelRadiusMeters, moduleLocations);
+    return config.withDrivetrain(dt);
+  }
+
+  /**
+   * Drivetrain-agnostic overload attaching animated rotating steer forks and spinning wheels from
+   * any swerve implementation (CTRE Phoenix 6 Swerve, REV MAXSwerve, AdvantageKit, or custom
+   * odometry) onto an existing URDF- or manifest-loaded {@link CadRobotConfig}.
+   *
+   * @param config Existing {@link CadRobotConfig} with a chassis asset.
+   * @param steerForkAsset Optional shared steer-fork CAD asset (may be {@code null}).
+   * @param wheelAsset Optional shared wheel CAD asset (may be {@code null}).
+   * @param wheelRadiusMeters Positive wheel radius in meters.
+   * @param moduleLocations Module mounting locations in chassis frame (typically FL, FR, BL, BR).
+   * @param fieldPoseSupplier Live 2D field pose supplier.
+   * @param gyroRotationSupplier Live 3D gyro rotation supplier.
+   * @param modulePositionsSupplier Live swerve module positions supplier.
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig attachSwerveModules(
+      CadRobotConfig config,
+      CadAssetConfig steerForkAsset,
+      CadAssetConfig wheelAsset,
+      double wheelRadiusMeters,
+      List<Translation3d> moduleLocations,
+      Supplier<Pose2d> fieldPoseSupplier,
+      Supplier<Rotation3d> gyroRotationSupplier,
+      Supplier<SwerveModulePosition[]> modulePositionsSupplier) {
+    Objects.requireNonNull(config, "config");
+    CadAssetConfig chassis =
+        config
+            .getChassisAsset()
+            .orElseThrow(
+                () ->
+                    new IllegalStateException(
+                        "CadRobotConfig '"
+                            + config.getRobotName()
+                            + "' has no chassis asset. Load a chassis via fromUrdfZip/fromManifest/withChassisAsset first."));
+    CadDrivetrainConfig dt =
+        YamsDrivetrainBridge.fromYamsSwerve(
+            chassis,
+            steerForkAsset,
+            wheelAsset,
+            wheelRadiusMeters,
+            moduleLocations,
+            fieldPoseSupplier,
+            gyroRotationSupplier,
+            modulePositionsSupplier);
+    return config.withDrivetrain(dt);
   }
 
   private static CadRobotManifest requireManifest(CadRobotConfig config) {

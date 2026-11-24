@@ -262,7 +262,7 @@ CadCollisionTriggers.onExtensionViolation(cadSim.getSimulator())
 
 ## 5. Real-Robot Case Study: FRC 6328 "Darwin"
 
-See `examples/commands3/darwin_6328_2027/` for a complete port of FRC Team 6328 Mechanical Advantage's 2026 robot (*Darwin*) to YAMS 2027 (`Arm` + `Elevator` + `TalonFXWrapper`) and YACSim:
+See `examples/commands3/darwin_6328_2027/` for an independent community port referencing FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 robot (*Darwin*) CAD assets using YAMS 2027 + YACSim (not affiliated with or tested by Team 6328):
 - Downloads 6328's MIT-licensed `.glb` models (`model.glb` through `model_3.glb`) via `setup_darwin_cad.ps1`.
 - Models the `Hood`, `Slamtake`, coupled pin-in-slot `FrontHopper`, and `TrashCompactor`.
 - Verified live in AdvantageScope under a strict `-Xmx256m` robot JVM cap (`-XX:MaxHeapSize=268435456`).

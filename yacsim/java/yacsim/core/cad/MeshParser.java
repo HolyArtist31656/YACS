@@ -14,10 +14,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.wpilib.math.geometry.Translation3d;
 import yacsim.core.physics.BoundingBox3d;
@@ -26,7 +28,8 @@ import yacsim.core.util.MinimalJson;
 
 /**
  * Zero-dependency CAD mesh parser supporting header-only glTF 2.0 ({@code .glb}/{@code .gltf})
- * plus streaming Wavefront {@code .obj} and ASCII/binary {@code .stl} files.
+ * with full scene-graph node-transform traversal, plus streaming Wavefront {@code .obj} and
+ * ASCII/binary {@code .stl} files.
  */
 public final class MeshParser {
   private static final int GLB_MAGIC = 0x46546C67;
@@ -240,70 +243,285 @@ public final class MeshParser {
     }
   }
 
+  private static final class GltfBoundsAccumulator {
+    double minX = Double.POSITIVE_INFINITY;
+    double minY = Double.POSITIVE_INFINITY;
+    double minZ = Double.POSITIVE_INFINITY;
+    double maxX = Double.NEGATIVE_INFINITY;
+    double maxY = Double.NEGATIVE_INFINITY;
+    double maxZ = Double.NEGATIVE_INFINITY;
+    int totalTriangles = 0;
+    final List<BoundingBox3d> subBoxes = new ArrayList<>();
+    boolean subBoxOverflow = false;
+  }
+
   @SuppressWarnings("unchecked")
   private static MeshMetadata parseGltfJson(
       Path path, String jsonText, long fileSize, MeshFormat format, CadAssetConfig config) {
     Map<String, Object> root = (Map<String, Object>) MinimalJson.parse(jsonText);
     List<Object> accessors = (List<Object>) root.get("accessors");
     List<Object> meshes = (List<Object>) root.get("meshes");
+    List<Object> nodes = (List<Object>) root.get("nodes");
     double scale = config.getUnitScaleToMeters();
-    double minX = Double.POSITIVE_INFINITY, minY = Double.POSITIVE_INFINITY, minZ = Double.POSITIVE_INFINITY;
-    double maxX = Double.NEGATIVE_INFINITY, maxY = Double.NEGATIVE_INFINITY, maxZ = Double.NEGATIVE_INFINITY;
-    int totalTriangles = 0;
-    List<BoundingBox3d> subBoxes = new ArrayList<>();
-    boolean subBoxOverflow = false;
+    GltfBoundsAccumulator acc = new GltfBoundsAccumulator();
 
     if (meshes != null && accessors != null) {
-      for (Object meshObj : meshes) {
-        List<Object> primitives = (List<Object>) ((Map<String, Object>) meshObj).get("primitives");
-        if (primitives == null) continue;
-        for (Object primObj : primitives) {
-          Map<String, Object> prim = (Map<String, Object>) primObj;
-          if (prim.containsKey("indices")) {
-            Map<String, Object> acc = (Map<String, Object>) accessors.get(((Number) prim.get("indices")).intValue());
-            totalTriangles += ((Number) acc.get("count")).intValue() / 3;
+      if (nodes != null && !nodes.isEmpty()) {
+        List<Integer> rootNodes = extractGltfSceneRoots(root, nodes);
+        double[] identity = identityMatrix4();
+        Set<Integer> visiting = new HashSet<>();
+        for (int rootIdx : rootNodes) {
+          traverseGltfNode(rootIdx, identity, nodes, meshes, accessors, scale, acc, visiting);
+        }
+      }
+      // Fallback for minimal synthetic glTFs without scenes/nodes or unreferenced meshes
+      if (!Double.isFinite(acc.minX)) {
+        double[] identity = identityMatrix4();
+        for (int mIdx = 0; mIdx < meshes.size(); mIdx++) {
+          accumulateMeshWithMatrix(mIdx, identity, meshes, accessors, scale, acc);
+        }
+      }
+    }
+    if (!Double.isFinite(acc.minX)) {
+      throw new CadMeshValidationException("glTF/GLB mesh has no POSITION accessor min/max bounds.");
+    }
+    BoundingBox3d bounds = new BoundingBox3d(acc.minX, acc.minY, acc.minZ, acc.maxX, acc.maxY, acc.maxZ);
+    List<BoundingBox3d> effectiveSubBounds = acc.subBoxes.isEmpty() ? List.of(bounds) : acc.subBoxes;
+    return new MeshMetadata(
+        path, format, acc.totalTriangles, fileSize, bounds,
+        CadMassProperties.fromBoundingBox(bounds, config.getDensityKgPerM3()),
+        effectiveSubBounds);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<Integer> extractGltfSceneRoots(Map<String, Object> root, List<Object> nodes) {
+    List<Object> scenes = (List<Object>) root.get("scenes");
+    if (scenes != null && !scenes.isEmpty()) {
+      int sceneIdx = root.get("scene") instanceof Number n ? n.intValue() : 0;
+      if (sceneIdx < 0 || sceneIdx >= scenes.size()) {
+        sceneIdx = 0;
+      }
+      Map<String, Object> sceneObj = (Map<String, Object>) scenes.get(sceneIdx);
+      List<Object> sceneNodes = (List<Object>) sceneObj.get("nodes");
+      if (sceneNodes != null && !sceneNodes.isEmpty()) {
+        List<Integer> roots = new ArrayList<>(sceneNodes.size());
+        for (Object o : sceneNodes) {
+          if (o instanceof Number n) {
+            roots.add(n.intValue());
           }
-          Map<String, Object> attrs = (Map<String, Object>) prim.get("attributes");
-          if (attrs != null && attrs.containsKey("POSITION")) {
-            Map<String, Object> posAcc = (Map<String, Object>) accessors.get(((Number) attrs.get("POSITION")).intValue());
-            if (!prim.containsKey("indices")) totalTriangles += ((Number) posAcc.get("count")).intValue() / 3;
-            List<Object> mn = (List<Object>) posAcc.get("min");
-            List<Object> mx = (List<Object>) posAcc.get("max");
-            if (mn != null && mx != null && mn.size() >= 3 && mx.size() >= 3) {
-              double pMinX = ((Number) mn.get(0)).doubleValue() * scale;
-              double pMinY = ((Number) mn.get(1)).doubleValue() * scale;
-              double pMinZ = ((Number) mn.get(2)).doubleValue() * scale;
-              double pMaxX = ((Number) mx.get(0)).doubleValue() * scale;
-              double pMaxY = ((Number) mx.get(1)).doubleValue() * scale;
-              double pMaxZ = ((Number) mx.get(2)).doubleValue() * scale;
-              minX = Math.min(minX, pMinX);
-              minY = Math.min(minY, pMinY);
-              minZ = Math.min(minZ, pMinZ);
-              maxX = Math.max(maxX, pMaxX);
-              maxY = Math.max(maxY, pMaxY);
-              maxZ = Math.max(maxZ, pMaxZ);
-              if (!subBoxOverflow) {
-                if (subBoxes.size() < MAX_SUB_OBBS) {
-                  subBoxes.add(new BoundingBox3d(pMinX, pMinY, pMinZ, pMaxX, pMaxY, pMaxZ));
-                } else {
-                  subBoxOverflow = true;
-                  subBoxes.clear();
-                }
+        }
+        return roots;
+      }
+    }
+    Set<Integer> children = new HashSet<>();
+    for (Object nodeObj : nodes) {
+      Map<String, Object> node = (Map<String, Object>) nodeObj;
+      List<Object> childList = (List<Object>) node.get("children");
+      if (childList != null) {
+        for (Object c : childList) {
+          if (c instanceof Number n) {
+            children.add(n.intValue());
+          }
+        }
+      }
+    }
+    List<Integer> roots = new ArrayList<>();
+    for (int i = 0; i < nodes.size(); i++) {
+      if (!children.contains(i)) {
+        roots.add(i);
+      }
+    }
+    return roots;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void traverseGltfNode(
+      int nodeIdx,
+      double[] parentMatrix,
+      List<Object> nodes,
+      List<Object> meshes,
+      List<Object> accessors,
+      double unitScale,
+      GltfBoundsAccumulator acc,
+      Set<Integer> visiting) {
+    if (nodeIdx < 0 || nodeIdx >= nodes.size() || !visiting.add(nodeIdx)) {
+      return;
+    }
+    try {
+      Map<String, Object> node = (Map<String, Object>) nodes.get(nodeIdx);
+      double[] local = nodeLocalMatrix4(node);
+      double[] world = multiplyMatrix4(parentMatrix, local);
+
+      if (node.get("mesh") instanceof Number meshNum) {
+        int meshIdx = meshNum.intValue();
+        if (meshIdx >= 0 && meshIdx < meshes.size()) {
+          accumulateMeshWithMatrix(meshIdx, world, meshes, accessors, unitScale, acc);
+        }
+      }
+      List<Object> childList = (List<Object>) node.get("children");
+      if (childList != null) {
+        for (Object c : childList) {
+          if (c instanceof Number childNum) {
+            traverseGltfNode(
+                childNum.intValue(), world, nodes, meshes, accessors, unitScale, acc, visiting);
+          }
+        }
+      }
+    } finally {
+      visiting.remove(nodeIdx);
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  private static void accumulateMeshWithMatrix(
+      int meshIdx,
+      double[] worldMatrix,
+      List<Object> meshes,
+      List<Object> accessors,
+      double unitScale,
+      GltfBoundsAccumulator acc) {
+    Map<String, Object> meshObj = (Map<String, Object>) meshes.get(meshIdx);
+    List<Object> primitives = (List<Object>) meshObj.get("primitives");
+    if (primitives == null) {
+      return;
+    }
+    for (Object primObj : primitives) {
+      Map<String, Object> prim = (Map<String, Object>) primObj;
+      if (prim.containsKey("indices")) {
+        int idxAcc = ((Number) prim.get("indices")).intValue();
+        if (idxAcc >= 0 && idxAcc < accessors.size()) {
+          Map<String, Object> accMap = (Map<String, Object>) accessors.get(idxAcc);
+          acc.totalTriangles += ((Number) accMap.get("count")).intValue() / 3;
+        }
+      }
+      Map<String, Object> attrs = (Map<String, Object>) prim.get("attributes");
+      if (attrs != null && attrs.containsKey("POSITION")) {
+        int posIdx = ((Number) attrs.get("POSITION")).intValue();
+        if (posIdx < 0 || posIdx >= accessors.size()) {
+          continue;
+        }
+        Map<String, Object> posAcc = (Map<String, Object>) accessors.get(posIdx);
+        if (!prim.containsKey("indices")) {
+          acc.totalTriangles += ((Number) posAcc.get("count")).intValue() / 3;
+        }
+        List<Object> mn = (List<Object>) posAcc.get("min");
+        List<Object> mx = (List<Object>) posAcc.get("max");
+        if (mn != null && mx != null && mn.size() >= 3 && mx.size() >= 3) {
+          double lx0 = ((Number) mn.get(0)).doubleValue();
+          double ly0 = ((Number) mn.get(1)).doubleValue();
+          double lz0 = ((Number) mn.get(2)).doubleValue();
+          double lx1 = ((Number) mx.get(0)).doubleValue();
+          double ly1 = ((Number) mx.get(1)).doubleValue();
+          double lz1 = ((Number) mx.get(2)).doubleValue();
+
+          double pMinX = Double.POSITIVE_INFINITY, pMinY = Double.POSITIVE_INFINITY, pMinZ = Double.POSITIVE_INFINITY;
+          double pMaxX = Double.NEGATIVE_INFINITY, pMaxY = Double.NEGATIVE_INFINITY, pMaxZ = Double.NEGATIVE_INFINITY;
+          for (int ix = 0; ix < 2; ix++) {
+            double x = (ix == 0) ? lx0 : lx1;
+            for (int iy = 0; iy < 2; iy++) {
+              double y = (iy == 0) ? ly0 : ly1;
+              for (int iz = 0; iz < 2; iz++) {
+                double z = (iz == 0) ? lz0 : lz1;
+                double wx = (worldMatrix[0] * x + worldMatrix[4] * y + worldMatrix[8] * z + worldMatrix[12]) * unitScale;
+                double wy = (worldMatrix[1] * x + worldMatrix[5] * y + worldMatrix[9] * z + worldMatrix[13]) * unitScale;
+                double wz = (worldMatrix[2] * x + worldMatrix[6] * y + worldMatrix[10] * z + worldMatrix[14]) * unitScale;
+                if (wx < pMinX) pMinX = wx;
+                if (wy < pMinY) pMinY = wy;
+                if (wz < pMinZ) pMinZ = wz;
+                if (wx > pMaxX) pMaxX = wx;
+                if (wy > pMaxY) pMaxY = wy;
+                if (wz > pMaxZ) pMaxZ = wz;
               }
+            }
+          }
+          acc.minX = Math.min(acc.minX, pMinX);
+          acc.minY = Math.min(acc.minY, pMinY);
+          acc.minZ = Math.min(acc.minZ, pMinZ);
+          acc.maxX = Math.max(acc.maxX, pMaxX);
+          acc.maxY = Math.max(acc.maxY, pMaxY);
+          acc.maxZ = Math.max(acc.maxZ, pMaxZ);
+          if (!acc.subBoxOverflow) {
+            if (acc.subBoxes.size() < MAX_SUB_OBBS) {
+              acc.subBoxes.add(new BoundingBox3d(pMinX, pMinY, pMinZ, pMaxX, pMaxY, pMaxZ));
+            } else {
+              acc.subBoxOverflow = true;
+              acc.subBoxes.clear();
             }
           }
         }
       }
     }
-    if (!Double.isFinite(minX)) {
-      throw new CadMeshValidationException("glTF/GLB mesh has no POSITION accessor min/max bounds.");
+  }
+
+  private static double[] identityMatrix4() {
+    return new double[] {
+      1.0, 0.0, 0.0, 0.0,
+      0.0, 1.0, 0.0, 0.0,
+      0.0, 0.0, 1.0, 0.0,
+      0.0, 0.0, 0.0, 1.0
+    };
+  }
+
+  @SuppressWarnings("unchecked")
+  private static double[] nodeLocalMatrix4(Map<String, Object> node) {
+    List<Object> mat = (List<Object>) node.get("matrix");
+    if (mat != null && mat.size() >= 16) {
+      double[] m = new double[16];
+      for (int i = 0; i < 16; i++) {
+        m[i] = ((Number) mat.get(i)).doubleValue();
+      }
+      return m;
     }
-    BoundingBox3d bounds = new BoundingBox3d(minX, minY, minZ, maxX, maxY, maxZ);
-    List<BoundingBox3d> effectiveSubBounds = subBoxes.isEmpty() ? List.of(bounds) : subBoxes;
-    return new MeshMetadata(
-        path, format, totalTriangles, fileSize, bounds,
-        CadMassProperties.fromBoundingBox(bounds, config.getDensityKgPerM3()),
-        effectiveSubBounds);
+    double tx = 0.0, ty = 0.0, tz = 0.0;
+    List<Object> t = (List<Object>) node.get("translation");
+    if (t != null && t.size() >= 3) {
+      tx = ((Number) t.get(0)).doubleValue();
+      ty = ((Number) t.get(1)).doubleValue();
+      tz = ((Number) t.get(2)).doubleValue();
+    }
+    double qx = 0.0, qy = 0.0, qz = 0.0, qw = 1.0;
+    List<Object> r = (List<Object>) node.get("rotation");
+    if (r != null && r.size() >= 4) {
+      qx = ((Number) r.get(0)).doubleValue();
+      qy = ((Number) r.get(1)).doubleValue();
+      qz = ((Number) r.get(2)).doubleValue();
+      qw = ((Number) r.get(3)).doubleValue();
+    }
+    double sx = 1.0, sy = 1.0, sz = 1.0;
+    List<Object> s = (List<Object>) node.get("scale");
+    if (s != null && s.size() >= 3) {
+      sx = ((Number) s.get(0)).doubleValue();
+      sy = ((Number) s.get(1)).doubleValue();
+      sz = ((Number) s.get(2)).doubleValue();
+    }
+    double r00 = 1.0 - 2.0 * (qy * qy + qz * qz);
+    double r10 = 2.0 * (qx * qy + qw * qz);
+    double r20 = 2.0 * (qx * qz - qw * qy);
+    double r01 = 2.0 * (qx * qy - qw * qz);
+    double r11 = 1.0 - 2.0 * (qx * qx + qz * qz);
+    double r21 = 2.0 * (qy * qz + qw * qx);
+    double r02 = 2.0 * (qx * qz + qw * qy);
+    double r12 = 2.0 * (qy * qz - qw * qx);
+    double r22 = 1.0 - 2.0 * (qx * qx + qy * qy);
+    return new double[] {
+      r00 * sx, r10 * sx, r20 * sx, 0.0,
+      r01 * sy, r11 * sy, r21 * sy, 0.0,
+      r02 * sz, r12 * sz, r22 * sz, 0.0,
+      tx, ty, tz, 1.0
+    };
+  }
+
+  private static double[] multiplyMatrix4(double[] a, double[] b) {
+    double[] out = new double[16];
+    for (int col = 0; col < 4; col++) {
+      int c4 = col * 4;
+      double b0 = b[c4], b1 = b[c4 + 1], b2 = b[c4 + 2], b3 = b[c4 + 3];
+      for (int row = 0; row < 4; row++) {
+        out[c4 + row] =
+            a[row] * b0 + a[4 + row] * b1 + a[8 + row] * b2 + a[12 + row] * b3;
+      }
+    }
+    return out;
   }
 
   private static final class MeshAccumulator {

@@ -10,6 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -19,6 +20,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -27,12 +31,14 @@ import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.math.geometry.Rotation3d;
 import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.math.geometry.Translation3d;
 import org.xml.sax.SAXException;
 import yacsim.core.advantagescope.CadCameraConfig;
 import yacsim.core.cad.CadAssetConfig;
+import yacsim.core.cad.GlbMerger;
 import yacsim.core.physics.CadMassProperties;
 import yacsim.core.util.MinimalJson;
 import yacsim.core.yams.MotionAxis;
@@ -133,8 +139,63 @@ public final class CadManifestLoader {
    * @return Imported {@link CadRobotManifest}.
    * @throws IOException If reading or parsing the URDF file fails.
    */
-  public static CadRobotManifest loadUrdf(Path urdfPath) throws IOException {
+  /**
+   * Resolves the mesh base directory for a URDF file. For ROS-style packages exported by Onshape
+   * ({@code <pkg>/urdf/<robot>.urdf} with sibling {@code <pkg>/meshes/*.glb}), automatically
+   * returns the package root {@code <pkg>/} so {@code package://<pkg>/meshes/...} resolves cleanly.
+   *
+   * @param urdfPath Path to the {@code .urdf} or {@code .xml} file.
+   * @return Base directory for resolving relative mesh paths.
+   */
+  public static Path resolveUrdfBaseDir(Path urdfPath) {
     Objects.requireNonNull(urdfPath, "urdfPath");
+    Path parent = urdfPath.toAbsolutePath().normalize().getParent();
+    if (parent == null) {
+      return Path.of(".");
+    }
+    if (parent.getFileName() != null
+        && "urdf".equalsIgnoreCase(parent.getFileName().toString())
+        && parent.getParent() != null
+        && Files.isDirectory(parent.getParent().resolve("meshes"))) {
+      return parent.getParent();
+    }
+    return parent;
+  }
+
+  public static CadRobotManifest loadUrdf(Path urdfPath) throws IOException {
+    return loadUrdf(urdfPath, resolveUrdfBaseDir(urdfPath));
+  }
+
+  /**
+   * Imports a standard URDF XML file using an explicit {@code baseDir} to resolve relative mesh
+   * paths and merge multi-{@code <visual>} {@code .glb} links (such as native Onshape URDF
+   * assemblies).
+   *
+   * @param urdfPath Path to a URDF XML file.
+   * @param baseDir Base directory used to resolve relative mesh paths.
+   * @return Imported {@link CadRobotManifest}.
+   * @throws IOException If reading or parsing the URDF file fails.
+   */
+  public static CadRobotManifest loadUrdf(Path urdfPath, Path baseDir) throws IOException {
+    return loadUrdf(urdfPath, baseDir, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Imports a standard URDF XML file using an explicit {@code baseDir} and {@link CadUrdfOptions}
+   * (code-side fastener filtering, custom mesh exclusions, joint aliasing, and unbound collision
+   * control).
+   *
+   * @param urdfPath Path to a URDF XML file.
+   * @param baseDir Base directory used to resolve relative mesh paths.
+   * @param options Filtering, aliasing, and performance options.
+   * @return Imported {@link CadRobotManifest}.
+   * @throws IOException If reading or parsing the URDF file fails.
+   */
+  public static CadRobotManifest loadUrdf(
+      Path urdfPath, Path baseDir, CadUrdfOptions options) throws IOException {
+    Objects.requireNonNull(urdfPath, "urdfPath");
+    Objects.requireNonNull(baseDir, "baseDir");
+    Objects.requireNonNull(options, "options");
     Document doc;
     try (InputStream in = Files.newInputStream(urdfPath)) {
       DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -159,7 +220,7 @@ public final class CadManifestLoader {
       robotName = urdfPath.getFileName().toString().replaceFirst("\\.[^.]+$", "");
     }
 
-    List<CadLinkManifest> allLinks = new ArrayList<>();
+    List<Element> linkElements = new ArrayList<>();
     List<CadJointManifest> joints = new ArrayList<>();
     Set<String> childLinkNames = new LinkedHashSet<>();
 
@@ -170,25 +231,198 @@ public final class CadManifestLoader {
         continue;
       }
       if ("link".equals(el.getTagName())) {
-        allLinks.add(parseUrdfLink(el));
+        linkElements.add(el);
       } else if ("joint".equals(el.getTagName())) {
-        CadJointManifest joint = parseUrdfJoint(el);
+        CadJointManifest joint = parseUrdfJoint(el, options);
         joints.add(joint);
         childLinkNames.add(joint.childLink());
       }
     }
 
-    CadLinkManifest chassis = null;
-    List<CadLinkManifest> articulated = new ArrayList<>();
-    for (CadLinkManifest link : allLinks) {
-      if (chassis == null && !childLinkNames.contains(link.name())) {
-        chassis = link;
-      } else {
-        articulated.add(link);
+    // Identify the root/chassis link first so unified URDF Z-grounding can shift both the chassis
+    // GLB and all root-attached joints together by the exact same -minZ offset.
+    Element chassisEl = null;
+    for (Element el : linkElements) {
+      if (!childLinkNames.contains(el.getAttribute("name"))) {
+        chassisEl = el;
+        break;
       }
     }
-    if (chassis == null && !allLinks.isEmpty()) {
-      chassis = articulated.remove(0);
+    if (chassisEl == null && !linkElements.isEmpty()) {
+      chassisEl = linkElements.get(0);
+    }
+
+    Set<String> allowedChildLinks = null;
+    if (!options.getKeepOnlyJoints().isEmpty()) {
+      allowedChildLinks = new LinkedHashSet<>();
+      for (int i = 0; i < children.getLength(); i++) {
+        if (children.item(i) instanceof Element el && "joint".equals(el.getTagName())) {
+          String rawName = el.getAttribute("name");
+          String aliased = options.resolveJointAlias(rawName);
+          if (options.isJointAllowed(rawName, aliased)) {
+            Element childEl = firstChildElement(el, "child");
+            if (childEl != null && !childEl.getAttribute("link").isBlank()) {
+              allowedChildLinks.add(childEl.getAttribute("link"));
+            }
+          }
+        }
+      }
+    }
+
+    Map<String, List<GlbMerger.VisualInstance>> bakedInstancesByHostLink = new LinkedHashMap<>();
+    String chassisLinkName = chassisEl != null ? chassisEl.getAttribute("name") : "root";
+    if ((allowedChildLinks != null && options.isBakeUnboundLinksIntoChassis())
+        || !options.getJointLinkAttachments().isEmpty()) {
+      Map<String, CadJointManifest> parentJointByChild = new LinkedHashMap<>();
+      Map<String, String> childLinkByNormalizedJointName = new LinkedHashMap<>();
+      for (CadJointManifest j : joints) {
+        parentJointByChild.putIfAbsent(j.childLink(), j);
+        childLinkByNormalizedJointName.putIfAbsent(
+            CadRobotManifest.normalizeName(j.name()), j.childLink());
+      }
+      // Also map raw (pre-alias) joint names so attachLinksToJoint works with either raw or aliased names
+      for (int i = 0; i < children.getLength(); i++) {
+        if (children.item(i) instanceof Element el && "joint".equals(el.getTagName())) {
+          String rawName = el.getAttribute("name");
+          Element childEl = firstChildElement(el, "child");
+          if (rawName != null && !rawName.isBlank() && childEl != null) {
+            childLinkByNormalizedJointName.putIfAbsent(
+                CadRobotManifest.normalizeName(rawName), childEl.getAttribute("link"));
+          }
+        }
+      }
+
+      Map<String, Pose3d> restingPoseCache = new LinkedHashMap<>();
+      for (Element el : linkElements) {
+        if (el == chassisEl) {
+          continue;
+        }
+        String lName = el.getAttribute("name");
+        boolean isAllowedMovingLink = allowedChildLinks != null && allowedChildLinks.contains(lName);
+        if (isAllowedMovingLink || options.shouldExcludeMesh(lName)) {
+          continue;
+        }
+        List<ParsedUrdfVisual> visuals = collectUrdfMeshVisuals(el, options);
+        if (visuals.isEmpty()) {
+          continue;
+        }
+
+        // Determine host link: 1) explicit attachLinksToJoint, 2) nearest kept moving URDF ancestor, 3) chassis
+        String hostLink = null;
+        Optional<String> explicitTargetJoint = options.findAttachedTargetJoint(lName, null);
+        if (explicitTargetJoint.isEmpty()) {
+          for (ParsedUrdfVisual v : visuals) {
+            explicitTargetJoint = options.findAttachedTargetJoint(lName, v.meshFile());
+            if (explicitTargetJoint.isPresent()) {
+              break;
+            }
+          }
+        }
+        if (explicitTargetJoint.isPresent()) {
+          hostLink = childLinkByNormalizedJointName.get(explicitTargetJoint.get());
+        }
+        if (hostLink == null && allowedChildLinks != null && options.isBakeUnboundLinksIntoChassis()) {
+          hostLink = findNearestKeptAncestor(lName, allowedChildLinks, parentJointByChild);
+          if (hostLink == null) {
+            hostLink = chassisLinkName;
+          }
+        }
+        if (hostLink == null || hostLink.equals(lName)) {
+          continue;
+        }
+
+        Pose3d linkRestingPose =
+            restingPoseCache.computeIfAbsent(
+                lName, k -> computeCumulativeUrdfPose(k, parentJointByChild));
+        Pose3d hostRestingPose =
+            hostLink.equals(chassisLinkName)
+                ? new Pose3d()
+                : restingPoseCache.computeIfAbsent(
+                    hostLink, k -> computeCumulativeUrdfPose(k, parentJointByChild));
+
+        List<GlbMerger.VisualInstance> hostList =
+            bakedInstancesByHostLink.computeIfAbsent(hostLink, k -> new ArrayList<>());
+        for (ParsedUrdfVisual v : visuals) {
+          if (!v.meshFile().toLowerCase(Locale.ROOT).endsWith(".glb")) {
+            continue;
+          }
+          Path resolved = baseDir.resolve(v.meshFile()).normalize();
+          if (!Files.isRegularFile(resolved)) {
+            continue;
+          }
+          Pose3d visualWorld =
+              linkRestingPose.transformBy(
+                  new Transform3d(v.pos(), new Rotation3d(v.rpy()[0], v.rpy()[1], v.rpy()[2])));
+          Transform3d relToHost = new Transform3d(hostRestingPose, visualWorld);
+          boolean noSimp =
+              options.shouldTagNoSimplify(lName) || options.shouldTagNoSimplify(v.meshFile());
+          hostList.add(
+              new GlbMerger.VisualInstance(
+                  resolved,
+                  relToHost.getTranslation(),
+                  relToHost.getRotation(),
+                  v.unitScale(),
+                  noSimp));
+        }
+      }
+    }
+
+    double unifiedGroundShiftZ = 0.0;
+    CadLinkManifest chassis = null;
+    List<CadLinkManifest> articulated = new ArrayList<>();
+    for (Element el : linkElements) {
+      if (el == chassisEl) {
+        List<GlbMerger.VisualInstance> extraChassis =
+            bakedInstancesByHostLink.getOrDefault(chassisLinkName, List.of());
+        ParsedLinkResult res =
+            parseUrdfLinkWithGrounding(el, baseDir, true, options, true, extraChassis);
+        chassis = res.link();
+        unifiedGroundShiftZ = res.groundShiftZ();
+      } else {
+        String lName = el.getAttribute("name");
+        boolean reattachedElsewhere =
+            options.findAttachedTargetJoint(lName, null).isPresent()
+                && (allowedChildLinks == null || !allowedChildLinks.contains(lName));
+        boolean keepMesh =
+            !reattachedElsewhere && (allowedChildLinks == null || allowedChildLinks.contains(lName));
+        List<GlbMerger.VisualInstance> extraForLink =
+            keepMesh ? bakedInstancesByHostLink.getOrDefault(lName, List.of()) : List.of();
+        articulated.add(
+            parseUrdfLinkWithGrounding(el, baseDir, false, options, keepMesh, extraForLink).link());
+      }
+    }
+
+    if (chassis != null && Math.abs(unifiedGroundShiftZ) > 1e-6) {
+      String chassisName = chassis.name();
+      double shiftZ = unifiedGroundShiftZ;
+      List<CadJointManifest> shiftedJoints = new ArrayList<>(joints.size());
+      for (CadJointManifest j : joints) {
+        if (j.parentLink().equals(chassisName)) {
+          Translation3d o = j.originMeters();
+          shiftedJoints.add(
+              new CadJointManifest(
+                  j.name(),
+                  j.type(),
+                  j.parentLink(),
+                  j.childLink(),
+                  new Translation3d(o.getX(), o.getY(), o.getZ() + shiftZ),
+                  j.originRotation(),
+                  j.zeroOffset(),
+                  j.axis(),
+                  j.inverted(),
+                  j.minLimit(),
+                  j.maxLimit(),
+                  j.softMinLimit(),
+                  j.softMaxLimit(),
+                  j.startingPosition(),
+                  j.lengthMeters(),
+                  j.wheelRadiusMeters(),
+                  j.momentOfInertiaKgM2()));
+        } else {
+          shiftedJoints.add(j);
+        }
+      }
+      joints = shiftedJoints;
     }
 
     return new CadRobotManifest(
@@ -204,6 +438,186 @@ public final class CadManifestLoader {
         articulated,
         joints,
         List.of());
+  }
+
+  /**
+   * Pair of a parsed {@link CadRobotManifest} and the directory used to resolve relative mesh paths
+   * (such as binary {@code .glb} or {@code .stl} files extracted from a native Onshape URDF {@code
+   * .zip} export).
+   *
+   * @param manifest Parsed {@link CadRobotManifest}.
+   * @param baseDir Base directory containing the URDF file and its relative mesh paths.
+   */
+  public record UrdfLoadResult(CadRobotManifest manifest, Path baseDir) {
+    /** Compact constructor validating non-null result fields. */
+    public UrdfLoadResult {
+      Objects.requireNonNull(manifest, "manifest");
+      Objects.requireNonNull(baseDir, "baseDir");
+    }
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into a temporary directory,
+   * auto-discovers the {@code .urdf} descriptor inside the archive, and loads its {@link
+   * CadRobotManifest} alongside the extracted base directory for mesh resolution.
+   *
+   * <p>Zero third-party dependencies are required; uses {@link ZipInputStream} with Zip-Slip path
+   * traversal protection.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and extracted mesh base directory.
+   * @throws IOException If extraction fails, a Zip-Slip traversal entry is detected, or no URDF
+   *     file is found inside the archive.
+   */
+  public static UrdfLoadResult loadUrdfZip(Path zipPath) throws IOException {
+    return loadUrdfZip(zipPath, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into a temporary directory and
+   * loads it with the supplied {@link CadUrdfOptions}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param options Filtering, aliasing, and performance options.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and extracted mesh base directory.
+   * @throws IOException If extraction or URDF parsing fails.
+   */
+  public static UrdfLoadResult loadUrdfZip(Path zipPath, CadUrdfOptions options)
+      throws IOException {
+    Objects.requireNonNull(zipPath, "zipPath");
+    Path tempDir = Files.createTempDirectory("yacsim-urdf-");
+    return loadUrdfZip(zipPath, tempDir, options);
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into {@code extractDir},
+   * auto-discovers the {@code .urdf} descriptor inside the archive, and loads its {@link
+   * CadRobotManifest}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param extractDir Target directory where archive entries are extracted.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and extracted mesh base directory.
+   * @throws IOException If extraction fails, a Zip-Slip traversal entry is detected, or no URDF
+   *     file is found inside the archive.
+   */
+  public static UrdfLoadResult loadUrdfZip(Path zipPath, Path extractDir) throws IOException {
+    return loadUrdfZip(zipPath, extractDir, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into {@code extractDir} and
+   * loads it with the supplied {@link CadUrdfOptions}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param extractDir Target directory where archive entries are extracted.
+   * @param options Filtering, aliasing, and performance options.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and extracted mesh base directory.
+   * @throws IOException If extraction or URDF parsing fails.
+   */
+  public static UrdfLoadResult loadUrdfZip(
+      Path zipPath, Path extractDir, CadUrdfOptions options) throws IOException {
+    Objects.requireNonNull(zipPath, "zipPath");
+    Objects.requireNonNull(extractDir, "extractDir");
+    Objects.requireNonNull(options, "options");
+    Files.createDirectories(extractDir);
+    Path extractRoot = extractDir.toAbsolutePath().normalize();
+
+    try (InputStream fis = Files.newInputStream(zipPath);
+        ZipInputStream zis = new ZipInputStream(fis)) {
+      ZipEntry entry;
+      while ((entry = zis.getNextEntry()) != null) {
+        String entryName = entry.getName().replace('\\', '/');
+        if (entryName.startsWith("__MACOSX/") || entryName.isBlank()) {
+          zis.closeEntry();
+          continue;
+        }
+        Path dest = extractRoot.resolve(entryName).normalize();
+        if (!dest.startsWith(extractRoot)) {
+          throw new IOException(
+              "Blocked Zip-Slip path traversal entry in URDF archive: " + entry.getName());
+        }
+        if (entry.isDirectory()) {
+          Files.createDirectories(dest);
+        } else {
+          if (dest.getParent() != null) {
+            Files.createDirectories(dest.getParent());
+          }
+          Files.copy(zis, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+        zis.closeEntry();
+      }
+    }
+
+    Path urdfFile = findUrdfFileInDirectory(extractRoot);
+    Path baseDir = resolveUrdfBaseDir(urdfFile);
+    return new UrdfLoadResult(loadUrdf(urdfFile, baseDir, options), baseDir);
+  }
+
+  /**
+   * Auto-detects and loads a URDF robot description from a {@code .zip} archive, a {@code .urdf} /
+   * {@code .xml} file, or an extracted directory containing a {@code .urdf} file.
+   *
+   * @param path Path to a URDF {@code .zip} bundle, {@code .urdf}/{@code .xml} file, or folder.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and mesh base directory.
+   * @throws IOException If reading, extraction, or URDF discovery fails.
+   */
+  public static UrdfLoadResult loadUrdfOrZip(Path path) throws IOException {
+    return loadUrdfOrZip(path, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Auto-detects and loads a URDF robot description from a {@code .zip} archive, a {@code .urdf} /
+   * {@code .xml} file, or an extracted folder using the supplied {@link CadUrdfOptions}.
+   *
+   * @param path Path to a URDF {@code .zip} bundle, {@code .urdf}/{@code .xml} file, or folder.
+   * @param options Filtering, aliasing, and performance options.
+   * @return {@link UrdfLoadResult} containing the parsed manifest and mesh base directory.
+   * @throws IOException If reading, extraction, or URDF discovery fails.
+   */
+  public static UrdfLoadResult loadUrdfOrZip(Path path, CadUrdfOptions options) throws IOException {
+    Objects.requireNonNull(path, "path");
+    Objects.requireNonNull(options, "options");
+    if (Files.isDirectory(path)) {
+      Path dir = path.toAbsolutePath().normalize();
+      Path urdfFile = findUrdfFileInDirectory(dir);
+      Path baseDir = resolveUrdfBaseDir(urdfFile);
+      return new UrdfLoadResult(loadUrdf(urdfFile, baseDir, options), baseDir);
+    }
+    String lower = path.getFileName().toString().toLowerCase(Locale.ROOT);
+    if (lower.endsWith(".zip")) {
+      return loadUrdfZip(path, options);
+    }
+    Path baseDir = resolveUrdfBaseDir(path);
+    CadRobotManifest manifest = loadUrdf(path, baseDir, options);
+    return new UrdfLoadResult(manifest, baseDir);
+  }
+
+  private static Path findUrdfFileInDirectory(Path rootDir) throws IOException {
+    List<Path> urdfMatches;
+    List<Path> xmlMatches;
+    try (Stream<Path> walk = Files.walk(rootDir)) {
+      List<Path> regularFiles =
+          walk.filter(Files::isRegularFile)
+              .sorted(
+                  Comparator.comparingInt((Path p) -> rootDir.relativize(p).getNameCount())
+                      .thenComparing(p -> rootDir.relativize(p).toString()))
+              .toList();
+      urdfMatches =
+          regularFiles.stream()
+              .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".urdf"))
+              .toList();
+      xmlMatches =
+          regularFiles.stream()
+              .filter(p -> p.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".xml"))
+              .toList();
+    }
+    if (!urdfMatches.isEmpty()) {
+      return urdfMatches.get(0);
+    }
+    if (!xmlMatches.isEmpty()) {
+      return xmlMatches.get(0);
+    }
+    throw new IOException("No .urdf or .xml file found in URDF directory/archive: " + rootDir);
   }
 
   /**
@@ -358,45 +772,183 @@ public final class CadManifestLoader {
 
   // ---- URDF XML parsing helpers ----
 
-  private static CadLinkManifest parseUrdfLink(Element linkEl) {
+  private record ParsedUrdfVisual(
+      String meshFile,
+      double unitScale,
+      Translation3d pos,
+      double[] rpy,
+      List<CadAssetConfig.AxisRotation> axisRots) {}
+
+  private record ParsedLinkResult(CadLinkManifest link, double groundShiftZ) {}
+
+  private static String findNearestKeptAncestor(
+      String linkName,
+      Set<String> allowedChildLinks,
+      Map<String, CadJointManifest> parentJointByChild) {
+    Set<String> visited = new LinkedHashSet<>();
+    String cur = linkName;
+    while (cur != null && visited.add(cur)) {
+      CadJointManifest parentJoint = parentJointByChild.get(cur);
+      if (parentJoint == null) {
+        return null;
+      }
+      String parent = parentJoint.parentLink();
+      if (allowedChildLinks.contains(parent)) {
+        return parent;
+      }
+      cur = parent;
+    }
+    return null;
+  }
+
+  private static Pose3d computeCumulativeUrdfPose(
+      String linkName, Map<String, CadJointManifest> parentJointByChild) {
+    List<CadJointManifest> chain = new ArrayList<>();
+    Set<String> visited = new LinkedHashSet<>();
+    String cur = linkName;
+    while (cur != null && visited.add(cur)) {
+      CadJointManifest parentJoint = parentJointByChild.get(cur);
+      if (parentJoint == null) {
+        break;
+      }
+      chain.add(parentJoint);
+      cur = parentJoint.parentLink();
+    }
+    java.util.Collections.reverse(chain);
+    Pose3d pose = new Pose3d();
+    for (CadJointManifest j : chain) {
+      pose = pose.transformBy(new Transform3d(j.originMeters(), j.originRotation()));
+      if (!j.zeroOffset().equals(new Transform3d())) {
+        pose = pose.transformBy(j.zeroOffset());
+      }
+    }
+    return pose;
+  }
+
+  private static List<ParsedUrdfVisual> collectUrdfMeshVisuals(
+      Element linkEl, CadUrdfOptions options) {
+    List<ParsedUrdfVisual> meshVisuals = new ArrayList<>();
+    NodeList linkChildren = linkEl.getChildNodes();
+    for (int i = 0; i < linkChildren.getLength(); i++) {
+      if (linkChildren.item(i) instanceof Element el && "visual".equals(el.getTagName())) {
+        Element geom = firstChildElement(el, "geometry");
+        Element mesh = geom != null ? firstChildElement(geom, "mesh") : null;
+        if (mesh == null) {
+          continue;
+        }
+        String rawFilename = mesh.getAttribute("filename");
+        if (rawFilename == null || rawFilename.isBlank()) {
+          continue;
+        }
+        String cleanedMesh = stripUrdfPackagePrefix(rawFilename);
+        if (options.shouldExcludeMesh(cleanedMesh)) {
+          continue;
+        }
+        double scale = 1.0;
+        String scaleAttr = mesh.getAttribute("scale");
+        if (scaleAttr != null && !scaleAttr.isBlank()) {
+          double[] sc = parseUrdfVec3Array(scaleAttr);
+          if (sc[0] > 0.0) {
+            scale = sc[0];
+          }
+        }
+        Translation3d pos = new Translation3d();
+        double[] rpy = new double[] {0.0, 0.0, 0.0};
+        List<CadAssetConfig.AxisRotation> rots = new ArrayList<>();
+        Element origin = firstChildElement(el, "origin");
+        if (origin != null) {
+          pos = parseUrdfVec3(origin.getAttribute("xyz"));
+          rpy = parseUrdfVec3Array(origin.getAttribute("rpy"));
+          if (Math.abs(rpy[0]) > 1e-9) {
+            rots.add(new CadAssetConfig.AxisRotation("x", Math.toDegrees(rpy[0])));
+          }
+          if (Math.abs(rpy[1]) > 1e-9) {
+            rots.add(new CadAssetConfig.AxisRotation("y", Math.toDegrees(rpy[1])));
+          }
+          if (Math.abs(rpy[2]) > 1e-9) {
+            rots.add(new CadAssetConfig.AxisRotation("z", Math.toDegrees(rpy[2])));
+          }
+        }
+        meshVisuals.add(new ParsedUrdfVisual(cleanedMesh, scale, pos, rpy, rots));
+      }
+    }
+    return meshVisuals;
+  }
+
+  private static ParsedLinkResult parseUrdfLinkWithGrounding(
+      Element linkEl,
+      Path baseDir,
+      boolean computeGroundShift,
+      CadUrdfOptions options,
+      boolean keepVisualMesh,
+      List<GlbMerger.VisualInstance> extraChassisInstances)
+      throws IOException {
     String name = linkEl.getAttribute("name");
     String meshFile = null;
     double unitScale = 1.0;
+    double appliedGroundShiftZ = 0.0;
     Translation3d visualPos = new Translation3d();
     List<CadAssetConfig.AxisRotation> visualRots = new ArrayList<>();
 
-    Element visual = firstChildElement(linkEl, "visual");
-    if (visual != null) {
-      Element origin = firstChildElement(visual, "origin");
-      if (origin != null) {
-        visualPos = parseUrdfVec3(origin.getAttribute("xyz"));
-        double[] rpy = parseUrdfVec3Array(origin.getAttribute("rpy"));
-        if (Math.abs(rpy[0]) > 1e-9) {
-          visualRots.add(new CadAssetConfig.AxisRotation("x", Math.toDegrees(rpy[0])));
+    boolean skipEntireLinkMesh =
+        !keepVisualMesh || (!computeGroundShift && options.shouldExcludeMesh(name));
+
+    List<ParsedUrdfVisual> meshVisuals =
+        skipEntireLinkMesh ? List.of() : collectUrdfMeshVisuals(linkEl, options);
+
+    if (!meshVisuals.isEmpty() || !extraChassisInstances.isEmpty()) {
+      List<GlbMerger.VisualInstance> glbInstances = new ArrayList<>();
+      boolean allGlbPresent = true;
+      for (ParsedUrdfVisual v : meshVisuals) {
+        if (!v.meshFile().toLowerCase(Locale.ROOT).endsWith(".glb")) {
+          allGlbPresent = false;
+          break;
         }
-        if (Math.abs(rpy[1]) > 1e-9) {
-          visualRots.add(new CadAssetConfig.AxisRotation("y", Math.toDegrees(rpy[1])));
+        Path resolved = baseDir.resolve(v.meshFile()).normalize();
+        if (!Files.isRegularFile(resolved)) {
+          allGlbPresent = false;
+          break;
         }
-        if (Math.abs(rpy[2]) > 1e-9) {
-          visualRots.add(new CadAssetConfig.AxisRotation("z", Math.toDegrees(rpy[2])));
-        }
+        boolean noSimp =
+            options.shouldTagNoSimplify(name) || options.shouldTagNoSimplify(v.meshFile());
+        glbInstances.add(
+            new GlbMerger.VisualInstance(
+                resolved,
+                v.pos(),
+                new Rotation3d(v.rpy()[0], v.rpy()[1], v.rpy()[2]),
+                v.unitScale(),
+                noSimp));
       }
-      Element geom = firstChildElement(visual, "geometry");
-      if (geom != null) {
-        Element mesh = firstChildElement(geom, "mesh");
-        if (mesh != null) {
-          String rawFilename = mesh.getAttribute("filename");
-          if (rawFilename != null && !rawFilename.isBlank()) {
-            meshFile = stripUrdfPackagePrefix(rawFilename);
-          }
-          String scaleAttr = mesh.getAttribute("scale");
-          if (scaleAttr != null && !scaleAttr.isBlank()) {
-            double[] sc = parseUrdfVec3Array(scaleAttr);
-            if (sc[0] > 0.0) {
-              unitScale = sc[0];
-            }
+      if (allGlbPresent && !extraChassisInstances.isEmpty()) {
+        glbInstances.addAll(extraChassisInstances);
+      }
+      if (allGlbPresent && !glbInstances.isEmpty()) {
+        // Bake every <visual><origin xyz rpy> directly in URDF Z-up (matching Onshape URDF .glb
+        // meshes and AdvantageScope's native Z-up rendering with zero config.json rotations).
+        String safeName = name.replaceAll("[^A-Za-z0-9._-]", "_");
+        if (safeName.isBlank()) {
+          safeName = "link";
+        }
+        double groundShiftZ = 0.0;
+        if (computeGroundShift) {
+          double minZ = GlbMerger.computeTransformedMinZ(glbInstances);
+          if (Math.abs(minZ) > 1e-4) {
+            groundShiftZ = -minZ;
           }
         }
+        String relMerged = "yacsim_merged/" + safeName + ".glb";
+        appliedGroundShiftZ = groundShiftZ;
+        GlbMerger.merge(glbInstances, baseDir.resolve(relMerged), false, groundShiftZ);
+        meshFile = relMerged;
+        unitScale = 1.0;
+        visualPos = new Translation3d();
+        visualRots = List.of();
+      } else {
+        ParsedUrdfVisual first = meshVisuals.get(0);
+        meshFile = first.meshFile();
+        unitScale = first.unitScale();
+        visualPos = first.pos();
+        visualRots = first.axisRots();
       }
     }
 
@@ -422,11 +974,15 @@ public final class CadManifestLoader {
       }
     }
 
-    return new CadLinkManifest(name, meshFile, unitScale, visualPos, visualRots, massProps, true);
+    boolean collisionEnabled = computeGroundShift || !options.isDisableUnboundCollisions();
+    return new ParsedLinkResult(
+        new CadLinkManifest(
+            name, meshFile, unitScale, visualPos, visualRots, massProps, collisionEnabled),
+        appliedGroundShiftZ);
   }
 
-  private static CadJointManifest parseUrdfJoint(Element jointEl) {
-    String name = jointEl.getAttribute("name");
+  private static CadJointManifest parseUrdfJoint(Element jointEl, CadUrdfOptions options) {
+    String name = options.resolveJointAlias(jointEl.getAttribute("name"));
     CadJointType type = CadJointType.fromString(jointEl.getAttribute("type"));
     Element parentEl = firstChildElement(jointEl, "parent");
     Element childEl = firstChildElement(jointEl, "child");
@@ -493,7 +1049,7 @@ public final class CadManifestLoader {
   }
 
   private static String stripUrdfPackagePrefix(String raw) {
-    String cleaned = raw.trim();
+    String cleaned = raw.trim().replace('\\', '/');
     if (cleaned.startsWith("package://")) {
       cleaned = cleaned.substring("package://".length());
       int slash = cleaned.indexOf('/');
@@ -502,6 +1058,9 @@ public final class CadManifestLoader {
       }
     } else if (cleaned.startsWith("file://")) {
       cleaned = cleaned.substring("file://".length());
+    }
+    while (cleaned.startsWith("./")) {
+      cleaned = cleaned.substring(2);
     }
     return cleaned;
   }

@@ -23,7 +23,7 @@ All four workflows can be mixed freely (for example, loading a manifest and over
 
 1. Open your WPILib `2027_alpha7` Java 25 project in VS Code.
 2. Install **WPILib Commands v3** (`CommandsV3.json`) and **YAMS for Commands v3** (`yams_commands3.json` from `https://cdn.yassrobotics.com/`).
-3. Install **YACSim (`v2027.2.1-alpha1`)** via **WPILib: Manage Vendor Libraries -> Install new libraries (online)** using:
+3. Install **YACSim (`v2027.3.0-alpha1`)** via **WPILib: Manage Vendor Libraries -> Install new libraries (online)** using:
    ```text
    https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
    ```
@@ -36,7 +36,10 @@ All four workflows can be mixed freely (for example, loading a manifest and over
 
 ## Step 2: Prepare Your CAD Assets
 
-### Option A — Export Automatically From Onshape
+### Option A0 — Native Onshape URDF `.zip` (Zero Python, Zero API Keys)
+Right-click your Onshape Assembly tab -> **Export...** -> **Format: `URDF`**, **Geometry format: `GLB`**, **Resolution: `Coarse`**, drop the downloaded `.zip` into `src/main/deploy/yacsim/`, and call `CadRobotConfig.fromUrdfOrZip(deployDir.resolve("yacsim/my_robot_urdf.zip"))`. See the [Native Onshape URDF Guide](ONSHAPE_URDF_GUIDE.md) for safe `*Or(...)` fallback getters and native `YamsCommands3Bridge.fromYamsMechanism(...)` binding.
+
+### Option A — Export Automatically From Onshape (Python REST API CLI)
 Follow the [CAD-to-Code Naming Conventions](CAD_CODE_NAMING_CONVENTIONS.md) and [Onshape Exporter Guide](ONSHAPE_EXPORTER_GUIDE.md):
 
 ```powershell

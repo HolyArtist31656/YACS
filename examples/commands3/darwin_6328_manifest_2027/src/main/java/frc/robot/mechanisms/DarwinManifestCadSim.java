@@ -37,7 +37,6 @@ public class DarwinManifestCadSim implements Mechanism {
     CadRobotConfig robotConfig =
         CadRobotConfig.fromManifest(manifest, manifestDir)
             .withDrivetrainPoseSupplier(fieldPoseSupplier)
-            .withAutoInstallToAdvantageScope()
             .withAdvantageScopeExportDir(
                 Filesystem.getOperatingDirectory().toPath().resolve("advantagescope-assets"));
 

@@ -5,7 +5,7 @@ Open **this `vendordep/` directory** in **WPILib 2027 VS Code** to build, test, 
 ## Common Commands
 
 ```powershell
-# Format, build, run all 42 JUnit 5 tests, and generate Javadoc
+# Format, build, run all 51 JUnit 5 tests, and generate Javadoc
 .\gradlew spotlessApply build test javadoc "-Dorg.gradle.java.home=C:\Users\Public\wpilib\2027_alpha7\jdk"
 
 # Publish local Maven artifacts (build/maven/releases) and yacsim_commands3.json
@@ -17,3 +17,5 @@ Open **this `vendordep/` directory** in **WPILib 2027 VS Code** to build, test, 
 - **Online Vendordep JSON**: `https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json`
 - **Maven Repository**: `https://holyartist31656.github.io/YACS/maven/releases/`
 - **Hosted Javadoc**: `https://holyartist31656.github.io/YACS/javadoc/`
+
+**Current Release:** `v2027.4.0-alpha1` (61 JUnit 5 tests across 8 test classes).

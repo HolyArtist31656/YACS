@@ -167,6 +167,160 @@ public record CadJointManifest(
     return KilogramSquareMeters.of(requirePresent(momentOfInertiaKgM2, "momentOfInertiaKgM2"));
   }
 
+  /**
+   * @param fallback Fallback angle used if {@code minLimit} is omitted in CAD/URDF.
+   * @return Hard lower angular limit, or {@code fallback} when absent.
+   */
+  public Angle minLimitAngleOr(Angle fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return minLimit.isPresent() ? Radians.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback angle used if {@code maxLimit} is omitted in CAD/URDF.
+   * @return Hard upper angular limit, or {@code fallback} when absent.
+   */
+  public Angle maxLimitAngleOr(Angle fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return maxLimit.isPresent() ? Radians.of(maxLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback angle used if both {@code softMinLimit} and {@code minLimit} are
+   *     omitted.
+   * @return Soft lower angular limit, falling back to hard {@code minLimit} then {@code fallback}.
+   */
+  public Angle softMinLimitAngleOr(Angle fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (softMinLimit.isPresent()) {
+      return Radians.of(softMinLimit.getAsDouble());
+    }
+    return minLimit.isPresent() ? Radians.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback angle used if both {@code softMaxLimit} and {@code maxLimit} are
+   *     omitted.
+   * @return Soft upper angular limit, falling back to hard {@code maxLimit} then {@code fallback}.
+   */
+  public Angle softMaxLimitAngleOr(Angle fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (softMaxLimit.isPresent()) {
+      return Radians.of(softMaxLimit.getAsDouble());
+    }
+    return maxLimit.isPresent() ? Radians.of(maxLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback angle used if both {@code startingPosition} and {@code minLimit} are
+   *     omitted.
+   * @return Starting angle, falling back to {@code minLimit} then {@code fallback}.
+   */
+  public Angle startingAngleOr(Angle fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (startingPosition.isPresent()) {
+      return Radians.of(startingPosition.getAsDouble());
+    }
+    return minLimit.isPresent() ? Radians.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback distance used if {@code minLimit} is omitted in CAD/URDF.
+   * @return Hard lower linear limit, or {@code fallback} when absent.
+   */
+  public Distance minLimitDistanceOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return minLimit.isPresent() ? Meters.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback distance used if {@code maxLimit} is omitted in CAD/URDF.
+   * @return Hard upper linear limit, or {@code fallback} when absent.
+   */
+  public Distance maxLimitDistanceOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return maxLimit.isPresent() ? Meters.of(maxLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback distance used if both {@code softMinLimit} and {@code minLimit} are
+   *     omitted.
+   * @return Soft lower linear limit, falling back to hard {@code minLimit} then {@code fallback}.
+   */
+  public Distance softMinLimitDistanceOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (softMinLimit.isPresent()) {
+      return Meters.of(softMinLimit.getAsDouble());
+    }
+    return minLimit.isPresent() ? Meters.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback distance used if both {@code softMaxLimit} and {@code maxLimit} are
+   *     omitted.
+   * @return Soft upper linear limit, falling back to hard {@code maxLimit} then {@code fallback}.
+   */
+  public Distance softMaxLimitDistanceOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (softMaxLimit.isPresent()) {
+      return Meters.of(softMaxLimit.getAsDouble());
+    }
+    return maxLimit.isPresent() ? Meters.of(maxLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback distance used if both {@code startingPosition} and {@code minLimit}
+   *     are omitted.
+   * @return Starting distance, falling back to {@code minLimit} then {@code fallback}.
+   */
+  public Distance startingDistanceOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    if (startingPosition.isPresent()) {
+      return Meters.of(startingPosition.getAsDouble());
+    }
+    return minLimit.isPresent() ? Meters.of(minLimit.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback mechanism length used if {@code lengthMeters} is omitted in CAD/URDF.
+   * @return Mechanism length, or {@code fallback} when absent.
+   */
+  public Distance lengthOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return lengthMeters.isPresent() ? Meters.of(lengthMeters.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback wheel/roller radius used if {@code wheelRadiusMeters} is omitted.
+   * @return Wheel, roller, or drum radius, or {@code fallback} when absent.
+   */
+  public Distance wheelRadiusOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return wheelRadiusMeters.isPresent() ? Meters.of(wheelRadiusMeters.getAsDouble()) : fallback;
+  }
+
+  /**
+   * @param fallback Fallback wheel/roller diameter used if {@code wheelRadiusMeters} is omitted.
+   * @return Wheel or roller diameter ({@code 2 * wheelRadius}), or {@code fallback} when absent.
+   */
+  public Distance wheelDiameterOr(Distance fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return wheelRadiusMeters.isPresent()
+        ? Meters.of(2.0 * wheelRadiusMeters.getAsDouble())
+        : fallback;
+  }
+
+  /**
+   * @param fallback Fallback inertia used if {@code momentOfInertiaKgM2} is omitted in CAD/URDF.
+   * @return Axis moment of inertia, or {@code fallback} when absent.
+   */
+  public MomentOfInertia momentOfInertiaOr(MomentOfInertia fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return momentOfInertiaKgM2.isPresent()
+        ? KilogramSquareMeters.of(momentOfInertiaKgM2.getAsDouble())
+        : fallback;
+  }
+
   private double requirePresent(OptionalDouble opt, String field) {
     if (opt.isEmpty()) {
       throw new IllegalStateException(

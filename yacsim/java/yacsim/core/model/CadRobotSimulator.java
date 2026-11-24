@@ -4,6 +4,8 @@
 
 package yacsim.core.model;
 
+import static org.wpilib.units.Units.RadiansPerSecond;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,8 +17,6 @@ import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.Set;
 import org.wpilib.math.geometry.Pose2d;
-import static org.wpilib.units.Units.RadiansPerSecond;
-
 import org.wpilib.math.geometry.Pose3d;
 import org.wpilib.units.measure.AngularVelocity;
 import yacsim.core.advantagescope.AdvantageScopeConfigGenerator;
@@ -34,6 +34,8 @@ import yacsim.core.physics.ObbCollisionDetector;
  * #updateTelemetry()} publishes consistent snapshots on the 50 Hz main robot thread.
  */
 public final class CadRobotSimulator implements AutoCloseable {
+  private static final Pose3d IDENTITY_POSE = new Pose3d();
+
   private record SimSnapshot(
       Pose2d robotPose2d,
       Pose3d robotPose3d,
@@ -45,6 +47,7 @@ public final class CadRobotSimulator implements AutoCloseable {
   private final List<CadComponentConfig> allComponents;
   private final MeshMetadata chassisMetadata;
   private final Map<String, MeshMetadata> componentMetadata = new LinkedHashMap<>();
+  private final MeshMetadata[] componentMetadataByIndex;
   private final BoundingBox3d resolvedExtensionEnvelope;
   private final double chassisGroundOffsetMeters;
   private final Set<String> autoIgnoredPairKeys = new LinkedHashSet<>();
@@ -69,8 +72,12 @@ public final class CadRobotSimulator implements AutoCloseable {
         config.getChassisAsset().isPresent()
             ? MeshParser.parse(config.getChassisAsset().get())
             : null;
-    for (CadComponentConfig comp : allComponents) {
-      componentMetadata.put(comp.getName(), MeshParser.parse(comp.getAssetConfig()));
+    this.componentMetadataByIndex = new MeshMetadata[allComponents.size()];
+    for (int i = 0; i < allComponents.size(); i++) {
+      CadComponentConfig comp = allComponents.get(i);
+      MeshMetadata parsed = MeshParser.parse(comp.getAssetConfig());
+      componentMetadata.put(comp.getName(), parsed);
+      componentMetadataByIndex[i] = parsed;
     }
     this.resolvedExtensionEnvelope = resolveExtensionEnvelope(config, chassisMetadata);
     this.chassisGroundOffsetMeters =
@@ -78,15 +85,17 @@ public final class CadRobotSimulator implements AutoCloseable {
             ? -chassisMetadata.localBounds().minZ()
             : 0.0;
 
+    // Sample true initial resting poses immediately so updateTelemetry() never flashes links at (0,0,0)
     Pose3d[] initialPoses = new Pose3d[allComponents.size()];
     for (int i = 0; i < initialPoses.length; i++) {
-      initialPoses[i] = new Pose3d();
+      Pose3d p = allComponents.get(i).getPoseSupplier().get();
+      initialPoses[i] = p != null ? p : IDENTITY_POSE;
     }
     this.latestSnapshot =
-        new SimSnapshot(new Pose2d(), new Pose3d(), initialPoses, List.of(), Map.of());
+        new SimSnapshot(new Pose2d(), IDENTITY_POSE, initialPoses, List.of(), Map.of());
 
     if (config.isCollisionCheckingEnabled() && config.isIgnoreRestingOverlapsEnabled()) {
-      calibrateRestingOverlaps();
+      calibrateRestingOverlaps(initialPoses);
     }
     if (config.getAdvantageScopeOutputDir().isPresent()) {
       AdvantageScopeConfigGenerator.exportAssetBundle(
@@ -133,11 +142,7 @@ public final class CadRobotSimulator implements AutoCloseable {
     return null;
   }
 
-  private void calibrateRestingOverlaps() {
-    Pose3d[] restingPoses = new Pose3d[allComponents.size()];
-    for (int i = 0; i < allComponents.size(); i++) {
-      restingPoses[i] = allComponents.get(i).getPoseSupplier().get();
-    }
+  private void calibrateRestingOverlaps(Pose3d[] restingPoses) {
     List<CollisionEvent> restingHits = evaluateCollisions(restingPoses, false);
     for (CollisionEvent ev : restingHits) {
       if (ev.involves("ExtensionEnvelope")) {
@@ -169,7 +174,8 @@ public final class CadRobotSimulator implements AutoCloseable {
             : new Pose3d(robotPose2d);
     Pose3d[] poses = new Pose3d[allComponents.size()];
     for (int i = 0; i < allComponents.size(); i++) {
-      poses[i] = allComponents.get(i).getPoseSupplier().get();
+      Pose3d p = allComponents.get(i).getPoseSupplier().get();
+      poses[i] = p != null ? p : IDENTITY_POSE;
     }
     List<CollisionEvent> collisions =
         config.isCollisionCheckingEnabled() ? evaluateCollisions(poses, true) : List.of();
@@ -205,36 +211,45 @@ public final class CadRobotSimulator implements AutoCloseable {
     boolean checkChassis =
         chassisMetadata != null
             && config.getDrivetrainConfig().map(d -> d.isChassisCollisionEnabled()).orElse(true);
+    BoundingBox3d chassisBounds = checkChassis ? chassisMetadata.localBounds() : null;
 
-    for (int i = 0; i < allComponents.size(); i++) {
+    int count = allComponents.size();
+    for (int i = 0; i < count; i++) {
       CadComponentConfig compA = allComponents.get(i);
       if (!compA.isCollisionEnabled()) {
         continue;
       }
-      List<BoundingBox3d> boxesA = componentMetadata.get(compA.getName()).collisionSubBounds();
+      MeshMetadata metaA = componentMetadataByIndex[i];
+      BoundingBox3d boundsA = metaA.localBounds();
+      List<BoundingBox3d> boxesA = metaA.collisionSubBounds();
 
       if (checkChassis
           && !compA.getParentComponentName().map("Chassis"::equals).orElse(false)
-          && !isPairIgnored(compA.getName(), "Chassis")) {
+          && !isPairIgnored(compA.getName(), "Chassis")
+          && ObbCollisionDetector.spheresOverlap(boundsA, poses[i], chassisBounds, IDENTITY_POSE)) {
         OptionalDouble chassisHit =
             ObbCollisionDetector.testMultiObbCollision(
-                boxesA, poses[i], chassisMetadata.collisionSubBounds(), new Pose3d());
+                boxesA, poses[i], chassisMetadata.collisionSubBounds(), IDENTITY_POSE);
         if (chassisHit.isPresent()) {
           collisions.add(
               new CollisionEvent(compA.getName(), "Chassis", chassisHit.getAsDouble()));
         }
       }
 
-      for (int j = i + 1; j < allComponents.size(); j++) {
+      for (int j = i + 1; j < count; j++) {
         CadComponentConfig compB = allComponents.get(j);
         if (!compB.isCollisionEnabled()
             || areParentChild(compA, compB)
             || isPairIgnored(compA.getName(), compB.getName())) {
           continue;
         }
-        List<BoundingBox3d> boxesB = componentMetadata.get(compB.getName()).collisionSubBounds();
+        MeshMetadata metaB = componentMetadataByIndex[j];
+        if (!ObbCollisionDetector.spheresOverlap(boundsA, poses[i], metaB.localBounds(), poses[j])) {
+          continue;
+        }
         OptionalDouble depth =
-            ObbCollisionDetector.testMultiObbCollision(boxesA, poses[i], boxesB, poses[j]);
+            ObbCollisionDetector.testMultiObbCollision(
+                boxesA, poses[i], metaB.collisionSubBounds(), poses[j]);
         if (depth.isPresent()) {
           collisions.add(
               new CollisionEvent(compA.getName(), compB.getName(), depth.getAsDouble()));
@@ -308,7 +323,6 @@ public final class CadRobotSimulator implements AutoCloseable {
     return Collections.unmodifiableSet(autoIgnoredPairLabels);
   }
 
-
   /**
    * Returns the vertical grounding offset applied to the chassis in exported AdvantageScope configs
    * ({@code -chassisBounds.minZ()} when {@link CadRobotConfig#autoGroundChassis()} is enabled, or
@@ -319,7 +333,6 @@ public final class CadRobotSimulator implements AutoCloseable {
   public double getChassisGroundOffsetMeters() {
     return chassisGroundOffsetMeters;
   }
-
 
   /**
    * Returns an unmodifiable map of the latest sampled angular velocities (in rad/s) for all

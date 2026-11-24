@@ -111,6 +111,8 @@ In WPILib `2027.0.0-alpha-7`, desktop simulation uses Gradle's `application` plu
 
 ## Optional: Automated CAD Manifest / URDF Setup
 
+- **Zero-Python Native Onshape URDF (Fastest):** Export your Onshape Assembly via `Export -> Format: URDF -> Geometry format: GLB` and drop the `.zip` into `src/main/deploy/yacsim/`, then call `CadRobotConfig.fromUrdfOrZip(zipPath)`—no Python or API keys needed. See the [Native Onshape URDF Guide](ONSHAPE_URDF_GUIDE.md).
+
 Instead of typing pivots, limits, wheel radii, and mass properties in Java, you can place a `yacsim-robot.json` manifest (or a standard `.urdf` file exported from Onshape, Fusion 360, or SolidWorks) in `src/main/deploy/yacsim/` and load it in one line:
 
 ```java

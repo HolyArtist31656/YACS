@@ -1,6 +1,6 @@
 # FRC 6328 "Darwin" — Manifest-Driven CAD Example (`yacsim-robot.json`)
 
-This example demonstrates **Phase 1 CAD-to-YACSim automation** using FRC Team 6328 Mechanical Advantage's 2026 robot **Darwin** ([Onshape Assembly](https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264), [RobotCode2026Public](https://github.com/Mechanical-Advantage/RobotCode2026Public)).
+This example demonstrates **Phase 1 CAD-to-YACSim automation** independently referencing FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 robot **Darwin** CAD assets (not affiliated with or tested by Team 6328) ([Onshape Assembly](https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264), [RobotCode2026Public](https://github.com/Mechanical-Advantage/RobotCode2026Public)).
 
 ## What Comes From CAD (`yacsim-robot.json`) vs. Java
 

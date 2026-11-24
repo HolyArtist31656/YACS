@@ -1,6 +1,6 @@
 # CAD Manifest & URDF Automation Guide (`yacsim-robot.json`)
 
-YACSim `v2027.2.1-alpha1` introduces **Phase 1 CAD-to-YACSim Automation** (`yacsim.core.manifest`), giving FRC teams a choice between three fully interoperable workflows:
+YACSim `v2027.3.0-alpha1` introduces **Phase 1 CAD-to-YACSim Automation** (`yacsim.core.manifest`), giving FRC teams a choice between three fully interoperable workflows:
 
 1. **Manual Java Configuration** — Hand-configure `CadRobotConfig`, `CadAssetConfig`, pivots, limits, and `YamsCommands3Bridge` (all existing APIs remain 100% unchanged).
 2. **Manifest-Driven (`yacsim-robot.json`)** — Feed all CAD-extractable geometry, exact mass/inertia tensors, joint pivots, axes, hard/soft limits, arm lengths, drum/wheel radii, and cameras from a single `yacsim-robot.json` file into both **YACSim** and **YAMS 2027**. Keep only electrical & control values (CAN IDs, `DCMotor`, gear ratios, PID/FF gains) in Java.
@@ -169,7 +169,9 @@ YamsCommands3Bridge.bindFromManifest(robotConfig, "Flywheel", flywheel.getMotor(
 
 ---
 
-## 4. Direct URDF XML Import (`CadRobotConfig.fromUrdf`)
+## 4. Direct URDF & Native Onshape URDF `.zip` Import (`fromUrdf` / `fromUrdfOrZip`)
+
+Starting in `v2027.3.0-alpha1`, `CadRobotConfig.fromUrdfOrZip(Path)` and `CadRobotConfig.fromUrdfZip(Path)` also accept **native Onshape URDF `.zip` exports** (with nested binary `.glb` meshes) or extracted URDF folders with zero Python and zero API keys. See the dedicated [Native Onshape URDF Guide](ONSHAPE_URDF_GUIDE.md) for step-by-step export instructions and safe `*Or(...)` fallback getters.
 
 If your CAD team exports a standard `.urdf` file from Onshape (`onshape-to-robot`), Fusion 360, or SolidWorks (`sw_urdf_exporter`), YACSim imports it with **zero third-party XML libraries** (using the JDK's XXE-hardened DOM parser):
 

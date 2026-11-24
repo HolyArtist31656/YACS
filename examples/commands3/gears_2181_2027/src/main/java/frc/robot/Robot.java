@@ -17,18 +17,26 @@ import frc.robot.mechanisms.SpindexerMechanism;
 import frc.robot.mechanisms.TopIntakeMechanism;
 import frc.robot.mechanisms.TurretMechanism;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.wpilib.command3.Scheduler;
 import org.wpilib.framework.TimedRobot;
 import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Rotation2d;
+import org.wpilib.math.kinematics.SwerveModulePosition;
 import org.wpilib.system.Filesystem;
 import org.wpilib.system.Notifier;
 import yacsim.core.manifest.CadManifestLoader;
 import yacsim.core.manifest.CadRobotManifest;
 
 public class Robot extends TimedRobot {
+  private static final double MODULE_HALF_TRACK_METERS = 0.3429; // 13.5 in (MAXSwerve corner X/Y)
+  private static final double[][] MODULE_XY = {
+    {MODULE_HALF_TRACK_METERS, MODULE_HALF_TRACK_METERS}, // FL
+    {MODULE_HALF_TRACK_METERS, -MODULE_HALF_TRACK_METERS}, // FR
+    {-MODULE_HALF_TRACK_METERS, MODULE_HALF_TRACK_METERS}, // BL
+    {-MODULE_HALF_TRACK_METERS, -MODULE_HALF_TRACK_METERS} // BR
+  };
+
   private final Scheduler scheduler = Scheduler.getDefault();
   private final IntakeArmMechanism intakeArm;
   private final TurretMechanism turret;
@@ -41,12 +49,21 @@ public class Robot extends TimedRobot {
 
   private Notifier simNotifier;
   private double simTimeSeconds = 0.0;
-  private Pose2d simulatedFieldPose = new Pose2d(3.0, 4.0, new Rotation2d());
+  private volatile Pose2d simulatedFieldPose = new Pose2d(5.5, 4.0, new Rotation2d());
+  private final double[] moduleDistancesMeters = new double[4];
+  private final Rotation2d[] moduleAngles = {
+    new Rotation2d(), new Rotation2d(), new Rotation2d(), new Rotation2d()
+  };
+  private volatile SwerveModulePosition[] simulatedModulePositions = {
+    new SwerveModulePosition(),
+    new SwerveModulePosition(),
+    new SwerveModulePosition(),
+    new SwerveModulePosition()
+  };
 
   public Robot() {
     try {
-      Path liveDir = Filesystem.getDeployDirectory().toPath().resolve("yacsim/gears2181_onshape_live");
-      Path manifestDir = Files.exists(liveDir.resolve("yacsim-robot.json")) ? liveDir : Filesystem.getDeployDirectory().toPath().resolve("yacsim/gears2181");
+      Path manifestDir = Filesystem.getDeployDirectory().toPath().resolve("yacsim/gears2181");
       CadRobotManifest manifest =
           CadManifestLoader.loadJson(manifestDir.resolve("yacsim-robot.json"));
 
@@ -62,6 +79,7 @@ public class Robot extends TimedRobot {
               manifest,
               manifestDir,
               () -> simulatedFieldPose,
+              () -> simulatedModulePositions,
               intakeArm,
               turret,
               climber,
@@ -95,15 +113,43 @@ public class Robot extends TimedRobot {
   }
 
   private void stepSimulation() {
-    simTimeSeconds += 0.02;
+    double dt = 0.02;
+    Pose2d prevPose = simulatedFieldPose;
+    simTimeSeconds += dt;
 
-    // Smooth figure-8 field path
+    // Smooth figure-8 field path with real 4-corner swerve steer + wheel-spin kinematics
     double t = simTimeSeconds * 0.4;
     double x = 4.0 + 1.5 * Math.cos(t);
     double y = 4.0 + 1.0 * Math.sin(2.0 * t);
     double dx = -1.5 * Math.sin(t);
     double dy = 2.0 * Math.cos(2.0 * t);
-    simulatedFieldPose = new Pose2d(x, y, new Rotation2d(Math.atan2(dy, dx)));
+    double headingRad = Math.atan2(dy, dx);
+    Pose2d nextPose = new Pose2d(x, y, new Rotation2d(headingRad));
+
+    double vxField = (x - prevPose.getX()) / dt;
+    double vyField = (y - prevPose.getY()) / dt;
+    double dTheta = Math.atan2(
+        Math.sin(headingRad - prevPose.getRotation().getRadians()),
+        Math.cos(headingRad - prevPose.getRotation().getRadians()));
+    double omega = dTheta / dt;
+    double cosH = Math.cos(headingRad);
+    double sinH = Math.sin(headingRad);
+    double vxRobot = vxField * cosH + vyField * sinH;
+    double vyRobot = -vxField * sinH + vyField * cosH;
+
+    SwerveModulePosition[] updatedModules = new SwerveModulePosition[4];
+    for (int i = 0; i < 4; i++) {
+      double modVx = vxRobot - omega * MODULE_XY[i][1];
+      double modVy = vyRobot + omega * MODULE_XY[i][0];
+      double speed = Math.hypot(modVx, modVy);
+      moduleDistancesMeters[i] += speed * dt;
+      if (speed > 1e-4) {
+        moduleAngles[i] = new Rotation2d(Math.atan2(modVy, modVx));
+      }
+      updatedModules[i] = new SwerveModulePosition(moduleDistancesMeters[i], moduleAngles[i]);
+    }
+    simulatedFieldPose = nextPose;
+    simulatedModulePositions = updatedModules;
 
     // 12-second GEARS match cycle exercising all 7 mechanisms:
     //   0-3s: Deploy IntakeArm (95 deg), spin TopIntake (800 RPM) + Spindexer (400 RPM)

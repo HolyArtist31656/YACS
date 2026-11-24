@@ -22,7 +22,7 @@ cd examples\commands3\arm_and_elevator_2027
 
 ## 2. `commands3/darwin_6328_2027`
 
-A real-robot port of [FRC Team 6328 Mechanical Advantage's 2026 robot (*Darwin*)](https://github.com/Mechanical-Advantage/RobotCode2026Public) (MIT License) using YAMS 2027 (`Arm`, `Elevator`, `FlyWheel`, `TalonFXWrapper` — covering Hood, Slamtake arm + IntakeRoller, FrontHopper, TrashCompactor, HopperRoller, KickerFront/Back, and 4-motor Launcher Flywheel) + YACSim (`CadRobotConfig.fromAdvantageScopeDir`, `withComponentPoseSupplier`, `.withExtensionMargin`, `.ignoreRestingOverlaps`, `.addCamera`, `exportStarterLayout`, and `YamsMechanismBridge`), configured with `-Xmx256m` on the robot JVM to validate 2 GB SystemCore headroom.
+An independent community port referencing [FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 robot (*Darwin*)](https://github.com/Mechanical-Advantage/RobotCode2026Public) CAD assets (not affiliated with or tested by Team 6328) (MIT License) using YAMS 2027 (`Arm`, `Elevator`, `FlyWheel`, `TalonFXWrapper` — covering Hood, Slamtake arm + IntakeRoller, FrontHopper, TrashCompactor, HopperRoller, KickerFront/Back, and 4-motor Launcher Flywheel) + YACSim (`CadRobotConfig.fromAdvantageScopeDir`, `withComponentPoseSupplier`, `.withExtensionMargin`, `.ignoreRestingOverlaps`, `.addCamera`, `exportStarterLayout`, and `YamsMechanismBridge`), configured with `-Xmx256m` on the robot JVM to validate 2 GB SystemCore headroom.
 
 1. Download 6328's `.glb` meshes and `config.json` once:
    ```powershell

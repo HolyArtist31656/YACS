@@ -1,3 +1,30 @@
+# Changelog
+
+### Hardening, Pass-Through Factory & Code-Side CAD Repair (`v2027.4.0-alpha1` — 61 JUnit 5 + 9 Python Tests)
+- **Seamless YAMS Pass-Through Factory (`YacSimYamsFactory`)**: Pass a YAMS `*Config` + `SmartMotorController` to `createArm` / `createElevator` / `createPivot` / `createFlyWheel` (or `attachSwerve` / `registerComponent`) and get back the plain YAMS mechanism. Automatically short-circuits with zero CAD I/O on real robots (`RobotBase.isReal()`), while auto-binding, chaining nested URDF joints, and stepping `simIterate()` / `updateTelemetry()` in simulation.
+- **Nested URDF Kinematic Chaining (`YACS-AUDIT-01`)**: `YamsCommands3Bridge.bindFromManifest(...)` and new `chainFromManifest(...)` automatically compose live ancestor poses and intermediate fixed transforms in any binding order.
+- **Zero-Allocation Broadphase & 15-Axis SAT (`YACS-AUDIT-02`)**: `ObbCollisionDetector` and `CadRobotSimulator` now run bounding-sphere broadphase rejection and allocation-free primitive SAT/envelope checks.
+- **glTF Scene-Graph Node Transforms (`YACS-AUDIT-03`)**: `MeshParser.parseGltfJson(...)` recursively traverses glTF `scenes`/`nodes` transforms (`matrix` or `T*R*S`) for exact multi-node OBBs and grounding.
+- **Automatic Moving-Subtree Baking, `attachLinksToJoint` & Selective `NOSIMPLIFY` (`YACS-AUDIT-04`)**: Added `CadUrdfOptions.bakeUnboundLinksIntoChassis(true)` (automatically baking unbound children into their nearest kept moving parent's `.glb` or into `root.glb`), `attachLinksToJoint(joint, patterns...)` (re-parenting mis-mated `root`-attached parts into moving mechanism `.glb`s in Java), and `noSimplifyMeshPatterns(...)`.
+- **True Resting Initial Poses (`YACS-AUDIT-05`)**: `CadRobotSimulator` initializes its snapshot from true URDF resting poses before the first `simIterate()`.
+- **Roller Collision Preservation & Fuzzy Alias Hints (`YACS-AUDIT-08`)**: Bound `CONTINUOUS` rollers keep collision disabled when `disableUnboundCollisions(true)` is set, and `YacSimDiagnostic.suggestBestJointMatch(...)` suggests likely CAD aliases for unmatched Java names, and `YacSimDiagnostic.formatReport(...)` prints spatial `@ (x, y, z)m` coordinates for each movable joint.
+## [2027.4.0-alpha1] — Phase 3 Step 2: Code-Side Fastener Filtering, Joint Aliasing, Diagnostic Auto-Binder & Swerve Overlay
+
+### Added
+- **Code-Side Fastener & Lag Fix (`CadUrdfOptions`)**: Added `CadUrdfOptions.defaults()` and `CadUrdfOptions.recommended()` (`excludeFasteners(true)` + `disableUnboundCollisions(true)`), `excludeMeshPatterns(...)`, `withJointAlias(...)` / `withJointAliases(...)`, and `keepOnlyJoints(...)`, integrated across `CadManifestLoader.loadUrdf*` and `CadRobotConfig.fromUrdf*`. Automatically re-enables OBB collision on bound mechanisms while skipping unbound static links at 50 Hz.
+- **Startup CAD-to-Code Diagnostic & One-Call Auto-Binder**: Added `YacSimDiagnostic` (`formatReport`, `printReport`, `BindingReport`) and `YamsCommands3Bridge.autoBind(CadRobotConfig, Map<String, Object>)` to bind YAMS `Arm`/`Elevator`/`Pivot`/`FlyWheel`/`SmartMotorController` mechanisms in one call and report unmatched names with copy-pasteable alias hints.
+- **Swerve Wheel Spin & Steer Module Overlay**: Added `YamsCommands3Bridge.attachSwerveModules(...)` overloads (both YAMS `SwerveDrive` and drivetrain-agnostic suppliers) that reuse an existing URDF/manifest chassis while animating 4 rotating steer forks and spinning wheels.
+- **Tests & Docs**: Added 4 new JUnit 5 tests in `CadManifestLoaderTest` (**51 JUnit 5 tests across 8 classes** + 9 Python exporter tests) and updated `docs/ONSHAPE_URDF_GUIDE.md`, `docs/API_REFERENCE.md`, and `docs/UNIT_TESTS.md`.
+
+## [2027.3.0-alpha1] — Phase 3 Step 1: Native Onshape URDF `.zip` Support, Safe Fallbacks & YAMS `getPose3d()` Bridge
+
+### Added
+- **Zero-Dependency Native Onshape URDF `.zip` Import** (`CadManifestLoader.loadUrdfZip`, `loadUrdfOrZip`, `UrdfLoadResult`, `CadRobotConfig.fromUrdfZip`, `fromUrdfOrZip`): Drop Onshape's built-in `Assembly -> Export -> Format: URDF (Geometry format: GLB)` `.zip` directly into `src/main/deploy/yacsim/` with zero Python and zero API keys. Includes Zip-Slip path traversal protection, `__MACOSX/` skipping, `./` relative mesh prefix normalization, and multi-`<visual>` mesh selection. Strictly additive—all existing Manual Java, AdvantageScope Dir, `yacsim-robot.json`, and Python Onshape Exporter workflows remain unchanged.
+- **Pure-Java Multi-`<visual>` GLB Merger & ROS Package Root Detection** (`yacsim.core.cad.GlbMerger`, `CadManifestLoader.resolveUrdfBaseDir`): Automatically resolves Onshape's ROS package layout (`<pkg>/urdf/*.urdf` + `<pkg>/meshes/*.glb`) and merges multi-`<visual>` `.glb` links into single deduplicated binary `.glb` assets with each `<visual><origin>` preserved as a glTF 2.0 node.
+- **Safe `*Or(...)` Fallback Getters**: Added 14 fallback getters on `CadJointManifest` (`minLimitAngleOr`, `maxLimitAngleOr`, `softMinLimitAngleOr`, `softMaxLimitAngleOr`, `startingAngleOr`, `minLimitDistanceOr`, `maxLimitDistanceOr`, `softMinLimitDistanceOr`, `softMaxLimitDistanceOr`, `startingDistanceOr`, `lengthOr`, `wheelRadiusOr`, `wheelDiameterOr`, `momentOfInertiaOr`) plus `CadRobotManifest.getLinkMassOr` and `getJointMomentOfInertiaOr` so lightweight URDFs missing optional mate limits or materials never crash at startup.
+- **YAMS 2027 Native `getPose3d()` Bridge**: Added `YamsCommands3Bridge.fromYamsMechanism(Arm|Elevator|Pivot|FlyWheel)` (with optional `Transform3d` CAD mount offset).
+- **Tests & Documentation**: Added 3 new JUnit 5 tests in `CadManifestLoaderTest` (**47 JUnit 5 tests across 8 classes** + 9 Python exporter tests) and added `docs/ONSHAPE_URDF_GUIDE.md`.
+
 ## [2027.2.1-alpha1] — Live Onshape Hardening, CAD-to-Code Naming Conventions & FRC 2181 Example
 
 ### Added

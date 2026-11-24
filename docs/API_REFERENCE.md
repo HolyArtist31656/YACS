@@ -2,7 +2,7 @@
 
 YACSim ships two Maven artifacts under group ID `yacsim`:
 - `yacsim:YACSim-core` — Pure-Java CAD mesh parsing, OBB collision detection, drivetrain/mechanism bridges, and AdvantageScope export/telemetry.
-- `yacsim:YACSim-commands3` — WPILib Commands v3 `CadRobotMechanism`, `CadCollisionTriggers`, and direct `YamsCommands3Bridge` adapters.
+- `yacsim:YACSim-commands3` — WPILib Commands v3 `CadRobotMechanism`, `CadCollisionTriggers`, `YamsCommands3Bridge`, and `YacSimYamsFactory`.
 
 Full HTML Javadoc is hosted at **[https://holyartist31656.github.io/YACS/javadoc/](https://holyartist31656.github.io/YACS/javadoc/)**.
 
@@ -38,6 +38,27 @@ Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pos
 | `static Supplier<Pose3d> fromYamsFlyWheel(FlyWheel flywheel, Transform3d mountOffset)` | Wraps YAMS `FlyWheel.getPose3d()` with a CAD mounting offset. |
 | `static Supplier<Pose3d> fromYamsRollerMotor(SmartMotorController motor, Translation3d axle, MotionAxis axis [, boolean inverted])` | Spins a roller/wheel `.glb` directly from `motor.getMechanismPosition()`. |
 | `static Supplier<Pose3d> fromMountedYamsRoller(Supplier<Pose3d> parentPose, SmartMotorController motor, Translation3d localAxle, MotionAxis axis, boolean inverted)` | Mounts a spinning roller bar onto a moving parent mechanism. |
+| `static Supplier<Pose3d> chainFromManifest(CadRobotConfig config, String jointName, Supplier<Pose3d> localPose)` | Dynamically composes a joint-local `Pose3d` supplier with its full URDF/manifest ancestor kinematic chain (order-independent). |
+| `static YacSimDiagnostic.BindingReport autoBind(CadRobotConfig config, Map<String, Object> mechanisms)` | Forgiving one-call binder for YAMS `Arm`, `Elevator`, `Pivot`, `FlyWheel`, and `SmartMotorController` with fuzzy alias hints. |
+| `static CadRobotConfig attachSwerveModules(CadRobotConfig config, SwerveDrive drive, ...)` / drivetrain-agnostic overload | Overlays 4 animated rotating steer forks and spinning wheels onto any URDF/manifest `CadRobotConfig`. |
+
+### `YacSimYamsFactory` (`v2027.4.0-alpha1`)
+Zero-overhead pass-through factory (`implements AutoCloseable`) accepting YAMS 2027 mechanism configs and returning plain YAMS mechanisms. Automatically short-circuits with zero CAD disk I/O on real hardware (`RobotBase.isReal()`).
+
+| Method | Description |
+| --- | --- |
+| `static YacSimYamsFactory fromUrdfOrZip(Path path [, CadUrdfOptions options])` | Loads URDF `.zip`/`.urdf`/folder in simulation (default `CadUrdfOptions.recommended()`); returns no-op pass-through on real hardware. |
+| `static YacSimYamsFactory fromManifest(Path manifestPath)` | Loads `yacsim-robot.json` in simulation; returns no-op pass-through on real hardware. |
+| `static YacSimYamsFactory of(CadRobotConfig config [, BooleanSupplier isSim])` / `passthrough()` | Wraps an existing `CadRobotConfig` or creates an explicit no-op pass-through factory. |
+| `YacSimYamsFactory withPublishOnRealRobot(boolean enabled)` | Optional toggle to keep lightweight pose publishing active on real hardware (default `false`). |
+| `Arm createArm(String jointName, ArmConfig config, SmartMotorController motor)` | Constructs `new Arm(config, motor)`; in simulation also auto-binds (with nested parent chaining) and registers sim/telemetry hooks. |
+| `Elevator createElevator(String jointName, ElevatorConfig config, SmartMotorController motor)` | Constructs `new Elevator(config, motor)` with automatic simulation binding and stepping. |
+| `Pivot createPivot(String jointName, PivotConfig config, SmartMotorController motor)` | Constructs `new Pivot(config, motor)` with automatic simulation binding and stepping. |
+| `FlyWheel createFlyWheel(String jointName, FlyWheelConfig config, SmartMotorController motor)` | Constructs `new FlyWheel(config, motor)` and binds spinning roller telemetry (keeping roller OBB collision disabled). |
+| `SwerveDrive attachSwerve(SwerveDrive drive, CadAssetConfig fork, CadAssetConfig wheel, double radiusMeters, List<Translation3d> corners)` | Attaches 4 animated swerve modules in simulation; returns `drive` unchanged on real hardware. |
+| `<T> T registerComponent(String jointOrLink, T mech, Supplier<Pose3d> localPose, Runnable simHook, Runnable telemetryHook)` | Generic pass-through registration for custom mechanisms or supplier-based components. |
+| `Optional<CadRobotSimulator> startSimulator([boolean enableNT])` | Builds and caches `CadRobotSimulator` in simulation; returns `Optional.empty()` on real hardware. |
+| `void simIterate()` / `void updateTelemetry()` / `void printDiagnosticReport()` / `void close()` | Steps all registered mechanisms + `CadRobotSimulator`, prints diagnostics, and releases NT4 resources. |
 
 ### `CadCollisionTriggers`
 Factory methods returning WPILib Commands v3 `Trigger` instances.
@@ -127,7 +148,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `withMaxTriangleBudget(int maxTriangles)` | Raises/lowers triangle validation threshold. |
 
 ### `MeshParser`, `MeshMetadata`, `MeshFormat`, `CadMeshValidationException`
-- `MeshParser.parse(CadAssetConfig)` returns cached `MeshMetadata(sourcePath, format, triangleCount, fileSizeBytes, localBounds, massProperties, collisionSubBounds)` (with `MeshParser.clearCache()` and `MAX_SUB_OBBS = 64`).
+- `MeshParser.parse(CadAssetConfig)` returns cached `MeshMetadata(sourcePath, format, triangleCount, fileSizeBytes, localBounds, massProperties, collisionSubBounds)` (with `MeshParser.clearCache()`, `MAX_SUB_OBBS = 64`, and recursive glTF 2.0 `scenes`/`nodes` transform traversal).
 - `MeshFormat`: `GLB`, `GLTF`, `OBJ`, `STL` (`MeshFormat.fromPath(Path)`).
 - `CadMeshValidationException`: Thrown on missing files, unsupported formats, corrupt headers, or `.obj`/`.stl` files exceeding `maxTriangleBudget`.
 
@@ -148,7 +169,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 - **`BoundingBox3d`**: Immutable axis-aligned bounds record (`minX..maxZ`) with `center()`, `halfX/Y/Z()`, `sizeX/Y/Z()`, `scaled(double)`, `expandedForExtension(xyMargin, maxHeight)`, and `transformedCorners(Pose3d)`.
 - **`CadMassProperties`**: Immutable mass, center of mass, and principal inertia (`ixx`, `iyy`, `izz`) record with `withTotalMassKg(double)`, `fromBoundingBox(box, density)`, `mass()`, `momentOfInertiaAboutPivotKgM2(pivot, axis)`, and `momentOfInertiaAboutPivot(pivot, axis)`.
 - **`CollisionEvent`**: Immutable `(componentA, componentB, penetrationDepthMeters)` record with `involves(String)`.
-- **`ObbCollisionDetector`**: Separating Axis Theorem (SAT) `testObbCollision`, `testEnvelopeViolation`, `testMultiObbCollision(boxesA, poseA, boxesB, poseB)`, and `testMultiEnvelopeViolation(boxes, pose, envelope)`.
+- **`ObbCollisionDetector`**: Allocation-free 15-axis Separating Axis Theorem (SAT) with bounding-sphere broadphase (`boundingSphereRadius`, `spheresOverlap`, `testObbCollision`, `testEnvelopeViolation`, `testMultiObbCollision`, `testMultiEnvelopeViolation`).
 
 ---
 
@@ -178,10 +199,20 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `withMassPropertiesOverride(CadMassProperties)` | `CadAssetConfig` | Overrides bounding-box mass estimation in `MeshParser` with exact CAD mass, CoM, and principal inertia tensor (`Ixx`/`Iyy`/`Izz`). |
 | `fromManifest(Path)` / `fromManifest(CadRobotManifest, Path)` | `CadRobotConfig` | Populates chassis, links, exact mass properties, cameras, extension margins, and flags from `yacsim-robot.json`. |
 | `fromUrdf(Path)` | `CadRobotConfig` | Imports a standard `.urdf` XML file directly into a `CadRobotConfig` with attached `CadRobotManifest`. |
+| `fromUrdfZip(Path)` / `fromUrdfZip(Path, Path)` | `CadRobotConfig` | Extracts a native Onshape (or generic) URDF `.zip` archive (with Zip-Slip protection) and imports its `.urdf` + nested meshes. |
+| `CadUrdfOptions` | `yacsim.core.manifest` | Code-side URDF fastener filtering (`recommended()`), `disableUnboundCollisions(true)`, `excludeMeshPatterns(...)`, `withJointAlias(...)`, `keepOnlyJoints(...)`, `bakeUnboundLinksIntoChassis(true)` (with automatic moving-subtree baking), `attachLinksToJoint(...)`, and `noSimplifyMeshPatterns(...)`. |
+| `YacSimDiagnostic` | `yacsim.core.manifest` | Startup CAD-to-code reporter (`formatReport`, `printReport`, `suggestBestJointMatch`, `BindingReport`) highlighting `[BOUND]`/`[UNBOUND]` joints with spatial `@ (x, y, z)m` coordinates and fuzzy copy-pasteable alias hints. |
+| `autoBind(CadRobotConfig, Map<String, Object>)` | `YamsCommands3Bridge` | One-call forgiving binder for YAMS `Arm`, `Elevator`, `Pivot`, `FlyWheel`, and `SmartMotorController` returning a `YacSimDiagnostic.BindingReport`. |
+| `attachSwerveModules(...)` | `YamsCommands3Bridge` | Overlays 4 animated rotating steer forks and spinning wheels (YAMS `SwerveDrive` or generic swerve suppliers) onto any URDF/manifest `CadRobotConfig`. |
+| `fromUrdfOrZip(Path)` | `CadRobotConfig` | Auto-detects and imports a `.zip` archive, `.urdf`/`.xml` file, or extracted URDF directory in one call. |
+| `loadUrdfZip(...)` / `loadUrdfOrZip(Path)` / `resolveUrdfBaseDir(Path)` | `CadManifestLoader` | Zero-dependency URDF `.zip` extractor, ROS package root detector (`urdf/` + `meshes/`), and auto-discoverer returning `UrdfLoadResult(manifest, baseDir)`. |
+| `GlbMerger.merge(List<VisualInstance>, Path)` | `yacsim.core.cad.GlbMerger` | Pure-Java GLB 2.0 merger combining multi-`<visual>` URDF links with binary buffer deduplication, unified Z-grounding, and selective `NOSIMPLIFY_` node tagging (`VisualInstance(..., boolean noSimplify)`). |
+| `minLimitAngleOr(...)`, `lengthOr(...)`, `wheelDiameterOr(...)`, `momentOfInertiaOr(...)` (+ linear/soft/starting `*Or` variants) | `CadJointManifest` | Safe fallback getters returning caller defaults when lightweight URDFs omit mate limits, length, radius, or inertia. |
+| `getLinkMassOr(String, Mass)` / `getJointMomentOfInertiaOr(String, MomentOfInertia)` | `CadRobotManifest` | Safe CAD mass/inertia lookups returning caller defaults when CAD materials/inertia are absent. |
+| `fromYamsMechanism(Arm\|Elevator\|Pivot\|FlyWheel [, Transform3d])` | `YamsCommands3Bridge` | Wraps YAMS 2027's native `getPose3d()` directly without repeating pivot or motion-axis math. |
 | `getManifest()` | `CadRobotConfig` | Returns `Optional<CadRobotManifest>` when created from a manifest or URDF. |
-| `withComponentPoseSupplier(String, Supplier<Pose3d>)` | `CadRobotConfig` | Binds a live pose supplier by link/component name instead of 0-based index. |
+| `withComponentPoseSupplier(String, Supplier<Pose3d> [, boolean allowCollisionReenable])` | `CadRobotConfig` | Binds a live pose supplier by link/component name, with optional control over collision re-enable (set `false` for spinning rollers). |
 | `bindFromManifest(CadRobotConfig, String, Arm\|Elevator\|Pivot\|SmartMotorController)` | `YamsCommands3Bridge` | Binds YAMS 2027 mechanisms and rollers directly from manifest joint origins, axes, inversions, and wheel radii. |
 | `poseSupplierFromManifest(CadRobotManifest, String, Arm\|Elevator\|Pivot)` | `YamsCommands3Bridge` | Returns the manifest-derived `Supplier<Pose3d>` for composition or custom inspection. |
-
 | `getComponentPoseSupplier(String)` | `CadRobotConfig` | Returns `Optional<Supplier<Pose3d>>` for automatic parent-mounted roller chaining in `YamsCommands3Bridge.bindFromManifest`. |
 | `normalizeName(String)` | `CadRobotManifest` | Canonicalizes CAD/Java names (strips `yacsim_` prefix, spaces, hyphens, underscores, lowercases) for forgiving link/joint/component lookup. |

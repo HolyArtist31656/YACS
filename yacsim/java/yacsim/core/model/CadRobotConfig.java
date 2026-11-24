@@ -10,6 +10,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -26,9 +27,11 @@ import org.wpilib.math.geometry.Translation3d;
 import org.wpilib.units.measure.AngularVelocity;
 import yacsim.core.advantagescope.CadCameraConfig;
 import yacsim.core.cad.CadAssetConfig;
+import yacsim.core.manifest.CadJointManifest;
 import yacsim.core.manifest.CadLinkManifest;
 import yacsim.core.manifest.CadManifestLoader;
 import yacsim.core.manifest.CadRobotManifest;
+import yacsim.core.manifest.CadUrdfOptions;
 import yacsim.core.util.MinimalJson;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
 import yacsim.core.physics.BoundingBox3d;
@@ -46,6 +49,8 @@ public final class CadRobotConfig {
   private final List<CadCameraConfig> cameras = new ArrayList<>();
   private final List<CadRollerTelemetryConfig> rollerTelemetries = new ArrayList<>();
   private final Set<String> ignoredCollisionPairs = new LinkedHashSet<>();
+  private final Set<String> boundComponentKeys = new LinkedHashSet<>();
+  private boolean reenableCollisionOnBind = false;
   private Supplier<Pose2d> drivetrainPoseSupplier = () -> new Pose2d();
   private String telemetryTable = "YACSim";
   private Path advantageScopeOutputDir = null;
@@ -498,10 +503,150 @@ public final class CadRobotConfig {
    * @throws IOException If reading or parsing the URDF fails.
    */
   public static CadRobotConfig fromUrdf(Path urdfPath) throws IOException {
+    return fromUrdf(urdfPath, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Imports a standard URDF XML file with code-side {@link CadUrdfOptions} (fastener filtering,
+   * joint aliasing, unbound collision disabling).
+   *
+   * @param urdfPath Path to the URDF XML file.
+   * @param options Filtering, aliasing, and performance options.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If reading or parsing fails.
+   */
+  public static CadRobotConfig fromUrdf(Path urdfPath, CadUrdfOptions options) throws IOException {
     Objects.requireNonNull(urdfPath, "urdfPath");
-    CadRobotManifest loaded = CadManifestLoader.loadUrdf(urdfPath);
-    Path baseDir = urdfPath.toAbsolutePath().normalize().getParent();
-    return fromManifest(loaded, baseDir != null ? baseDir : Path.of("."));
+    Objects.requireNonNull(options, "options");
+    Path baseDir = CadManifestLoader.resolveUrdfBaseDir(urdfPath);
+    CadRobotManifest loaded = CadManifestLoader.loadUrdf(urdfPath, baseDir, options);
+    CadRobotConfig cfg = applyUrdfRestingPoses(fromManifest(loaded, baseDir), loaded);
+    cfg.reenableCollisionOnBind = options.isDisableUnboundCollisions();
+    return cfg;
+  }
+
+  /**
+   * Extracts and imports a native Onshape (or generic) URDF {@code .zip} bundle directly into a
+   * {@link CadRobotConfig}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @return Pre-populated {@link CadRobotConfig} with attached {@link CadRobotManifest}.
+   * @throws IOException If extracting or parsing the URDF archive fails.
+   */
+  public static CadRobotConfig fromUrdfZip(Path zipPath) throws IOException {
+    return fromUrdfZip(zipPath, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Extracts and imports a native Onshape (or generic) URDF {@code .zip} bundle with {@link
+   * CadUrdfOptions}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param options Filtering, aliasing, and performance options.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If extracting or parsing fails.
+   */
+  public static CadRobotConfig fromUrdfZip(Path zipPath, CadUrdfOptions options)
+      throws IOException {
+    CadManifestLoader.UrdfLoadResult result = CadManifestLoader.loadUrdfZip(zipPath, options);
+    CadRobotConfig cfg =
+        applyUrdfRestingPoses(fromManifest(result.manifest(), result.baseDir()), result.manifest());
+    cfg.reenableCollisionOnBind = options.isDisableUnboundCollisions();
+    return cfg;
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into {@code extractDir} and
+   * imports it into a {@link CadRobotConfig}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param extractDir Directory where archive entries are extracted.
+   * @return Pre-populated {@link CadRobotConfig} with attached {@link CadRobotManifest}.
+   * @throws IOException If extracting or parsing the URDF archive fails.
+   */
+  public static CadRobotConfig fromUrdfZip(Path zipPath, Path extractDir) throws IOException {
+    return fromUrdfZip(zipPath, extractDir, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Extracts a native Onshape (or generic) URDF {@code .zip} bundle into {@code extractDir} and
+   * imports it with {@link CadUrdfOptions}.
+   *
+   * @param zipPath Path to the exported URDF {@code .zip} archive.
+   * @param extractDir Directory where archive entries are extracted.
+   * @param options Filtering, aliasing, and performance options.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If extracting or parsing fails.
+   */
+  public static CadRobotConfig fromUrdfZip(
+      Path zipPath, Path extractDir, CadUrdfOptions options) throws IOException {
+    CadManifestLoader.UrdfLoadResult result =
+        CadManifestLoader.loadUrdfZip(zipPath, extractDir, options);
+    CadRobotConfig cfg =
+        applyUrdfRestingPoses(fromManifest(result.manifest(), result.baseDir()), result.manifest());
+    cfg.reenableCollisionOnBind = options.isDisableUnboundCollisions();
+    return cfg;
+  }
+
+  /**
+   * Auto-detects and imports a URDF robot from a {@code .zip} archive, a {@code .urdf} / {@code
+   * .xml} file, or an extracted folder containing a {@code .urdf} file.
+   *
+   * @param path Path to a URDF {@code .zip} bundle, {@code .urdf}/{@code .xml} file, or directory.
+   * @return Pre-populated {@link CadRobotConfig} with attached {@link CadRobotManifest}.
+   * @throws IOException If reading, extraction, or parsing fails.
+   */
+  public static CadRobotConfig fromUrdfOrZip(Path path) throws IOException {
+    return fromUrdfOrZip(path, CadUrdfOptions.defaults());
+  }
+
+  /**
+   * Auto-detects and imports a URDF robot from a {@code .zip} archive, a {@code .urdf} / {@code
+   * .xml} file, or an extracted folder using {@link CadUrdfOptions}.
+   *
+   * @param path Path to a URDF {@code .zip} bundle, {@code .urdf}/{@code .xml} file, or directory.
+   * @param options Filtering, aliasing, and performance options.
+   * @return Pre-populated {@link CadRobotConfig}.
+   * @throws IOException If reading, extraction, or parsing fails.
+   */
+  public static CadRobotConfig fromUrdfOrZip(Path path, CadUrdfOptions options) throws IOException {
+    CadManifestLoader.UrdfLoadResult result = CadManifestLoader.loadUrdfOrZip(path, options);
+    CadRobotConfig cfg =
+        applyUrdfRestingPoses(fromManifest(result.manifest(), result.baseDir()), result.manifest());
+    cfg.reenableCollisionOnBind = options.isDisableUnboundCollisions();
+    return cfg;
+  }
+
+  private static CadRobotConfig applyUrdfRestingPoses(
+      CadRobotConfig cfg, CadRobotManifest manifest) {
+    Map<String, CadJointManifest> parentJointByChild = new LinkedHashMap<>();
+    for (CadJointManifest j : manifest.joints()) {
+      parentJointByChild.putIfAbsent(j.childLink(), j);
+    }
+    for (CadComponentConfig comp : cfg.components) {
+      List<CadJointManifest> chain = new ArrayList<>();
+      Set<String> visited = new LinkedHashSet<>();
+      String cur = comp.getName();
+      while (cur != null && visited.add(cur)) {
+        CadJointManifest parentJoint = parentJointByChild.get(cur);
+        if (parentJoint == null) {
+          break;
+        }
+        chain.add(parentJoint);
+        cur = parentJoint.parentLink();
+      }
+      Collections.reverse(chain);
+      Pose3d resting = new Pose3d();
+      for (CadJointManifest j : chain) {
+        resting = resting.transformBy(new Transform3d(j.originMeters(), j.originRotation()));
+        if (!j.zeroOffset().equals(new Transform3d())) {
+          resting = resting.transformBy(j.zeroOffset());
+        }
+      }
+      final Pose3d restingPose = resting;
+      comp.withPoseSupplier(() -> restingPose);
+    }
+    return cfg;
   }
 
   /**
@@ -516,11 +661,33 @@ public final class CadRobotConfig {
    */
   public CadRobotConfig withComponentPoseSupplier(
       String componentName, Supplier<Pose3d> poseSupplier) {
+    return withComponentPoseSupplier(componentName, poseSupplier, true);
+  }
+
+  /**
+   * Binds a {@link Pose3d} supplier to an existing component by its link/component name, with
+   * explicit control over whether {@code CadUrdfOptions.disableUnboundCollisions(true)} should
+   * auto-re-enable OBB collision checking on bind (pass {@code false} for spinning rollers/wheels).
+   *
+   * @param componentName Registered component name.
+   * @param poseSupplier Live {@link Pose3d} supplier.
+   * @param allowCollisionReenable {@code true} to re-enable collision when unbound collisions were
+   *     disabled; {@code false} to keep collision disabled (recommended for continuous rollers).
+   * @return This config for chaining.
+   * @throws IllegalArgumentException If no component with {@code componentName} is registered.
+   */
+  public CadRobotConfig withComponentPoseSupplier(
+      String componentName, Supplier<Pose3d> poseSupplier, boolean allowCollisionReenable) {
     Objects.requireNonNull(componentName, "componentName");
     Objects.requireNonNull(poseSupplier, "poseSupplier");
     Optional<CadComponentConfig> match = findComponentByName(componentName);
     if (match.isPresent()) {
-      match.get().withPoseSupplier(poseSupplier);
+      CadComponentConfig comp = match.get();
+      comp.withPoseSupplier(poseSupplier);
+      markComponentBound(comp.getName());
+      if (reenableCollisionOnBind && allowCollisionReenable) {
+        comp.withCollisionEnabled(true);
+      }
       return this;
     }
     List<String> avail = components.stream().map(CadComponentConfig::getName).toList();
@@ -542,6 +709,31 @@ public final class CadRobotConfig {
    */
   public boolean hasComponent(String componentName) {
     return findComponentByName(componentName).isPresent();
+  }
+
+  /**
+   * Marks the named component as explicitly bound to a live mechanism pose supplier (used by {@link
+   * yacsim.core.manifest.YacSimDiagnostic}).
+   *
+   * @param componentName Component or link name.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig markComponentBound(String componentName) {
+    if (componentName != null && !componentName.isBlank()) {
+      boundComponentKeys.add(CadRobotManifest.normalizeName(componentName));
+    }
+    return this;
+  }
+
+  /**
+   * Returns whether the named component has been bound to a live pose supplier.
+   *
+   * @param componentName Component or link name.
+   * @return {@code true} if explicitly bound.
+   */
+  public boolean isComponentBound(String componentName) {
+    return componentName != null
+        && boundComponentKeys.contains(CadRobotManifest.normalizeName(componentName));
   }
 
   /**

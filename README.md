@@ -7,7 +7,7 @@
 
 ![YACSim End-to-End Architecture Pipeline](docs/images/yacsim-architecture-pipeline.jpg)
 
-**YACSim** is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** built to pair seamlessly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
+**YACSim** (`v2027.4.0-alpha1`) is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** designed to pair cleanly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
 
 ## Online Installation (WPILib 2027 VS Code)
 
@@ -23,53 +23,46 @@ https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
 
 ## Features
 
-- **AdvantageScope Import, Camera Frustums & Starter Layouts**: Import an existing `Robot_<Name>/config.json` in one line (`CadRobotConfig.fromAdvantageScopeDir`), apply CAD-tool presets (`CadCoordinateSystem.ONSHAPE_GLTF`, `SOLIDWORKS_MM`, `FUSION_360_MM`, `BLENDER_GLTF`), export camera frustums (`addCamera`), and generate a pre-wired AdvantageScope layout.
-- **Native CAD Mesh Parsing (with In-Memory Cache)**: Parses `.glb` / `.gltf` (glTF 2.0), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
-- **Direct YAMS & Commands v3 Adapters**: Wire YAMS `Arm`, `Elevator`, `Pivot`, `FlyWheel`, rollers/intake bars, and `SwerveDrive` mechanisms directly with `YamsCommands3Bridge`, `YamsMechanismBridge`, and `YamsDrivetrainBridge`—plus automatic `/YACSim/Rollers/<name>/` telemetry for baked-in wheels.
-- **CAD-to-YAMS Mass & MOI Estimation**: Compute WPILib `Mass` and parallel-axis `MomentOfInertia` directly from parsed CAD meshes (`YamsMechanismBridge.estimateMass` / `estimateArmMoi`) to seed YAMS physics.
-- **Multi-Primitive `.glb` Sub-OBBs & Auto-Calibrated Collisions**: Automatically derive legal FRC extension envelopes from your chassis CAD (`withExtensionMargin`), auto-ignore resting coupled-linkage OBB overlaps (`ignoreRestingOverlaps`), or configure explicit `ignoreCollisionPair(a, b)` rules and Commands v3 `CadCollisionTriggers`.
-- **AdvantageScope 3D Pipeline**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, and `CollisionDetails` over NT4, and exports ready-to-load `Robot_<Name>` AdvantageScope asset bundles with ordered multi-axis rotations.
-- **SystemCore 2 GB Validated**: Verified on FRC Team 6328's 2026 robot (*Darwin*, 2.1M+ triangles across 5 `.glb` meshes) under a strict `-Xmx256m` robot JVM cap with `~0.64 ms` `robotPeriodic()` telemetry overhead and zero steady-state loop overruns.
+- **Native Onshape URDF `.zip` Import & Code-Side CAD Repair**: Drop Onshape's built-in `Assembly -> Export -> Format: URDF (GLB)` `.zip` directly into `deploy/` and load via `CadRobotConfig.fromUrdfOrZip(Path, CadUrdfOptions)` with Zip-Slip protection, pure-Java `GlbMerger` deduplication, unified Z-grounding, code-side fastener filtering (`CadUrdfOptions.recommended()`), automatic moving-subtree baking (`bakeUnboundLinksIntoChassis(true)`), 1-line re-parenting (`attachLinksToJoint(...)`), selective `NOSIMPLIFY` mesh tagging, and safe `*Or(...)` fallback getters—strictly additive alongside Manual Java, AdvantageScope Dir, `yacsim-robot.json`, and the Python Onshape Exporter.
+- **Seamless Real-Robot Pass-Through Factory (`YacSimYamsFactory`)**: Pass a YAMS 2027 mechanism config and `SmartMotorController` to `createArm`, `createElevator`, `createPivot`, or `createFlyWheel` and get back the plain YAMS mechanism. On real hardware (`RobotBase.isReal()`), YACSim short-circuits with zero CAD disk I/O or OBB overhead; in simulation, it auto-binds, chains nested URDF joints, and steps `simIterate()` / `updateTelemetry()` automatically.
+- **Startup Diagnostics & Forgiving Auto-Binding (`YacSimDiagnostic` + `YamsCommands3Bridge.autoBind`)**: Prints every CAD joint's bound/unbound status, spatial `(X, Y, Z)` coordinates, and fuzzy token-similarity `.withJointAlias(...)` suggestions so default Onshape mate names (`revolute_1`) never break startup.
+- **Direct YAMS & Commands v3 Adapters + Animated Swerve Overlays**: Wire YAMS `Arm`, `Elevator`, `Pivot`, `FlyWheel`, rollers/intake bars, and `SwerveDrive` mechanisms directly with `YamsCommands3Bridge` (including automatic nested URDF parent-child chaining via `chainFromManifest(...)` and 4-corner animated swerve steer forks & spinning wheels via `attachSwerveModules(...)`).
+- **Native CAD Mesh Parsing (with glTF Node-Graph Transforms & In-Memory Cache)**: Parses `.glb` / `.gltf` (glTF 2.0 with recursive scene-graph `matrix` / `T*R*S` traversal), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
+- **Zero-Allocation Broadphase & 15-Axis SAT Collisions**: Pre-filters separated component pairs with bounding-sphere broadphase rejection before running allocation-free 15-axis SAT and extension-envelope checks, with `ignoreRestingOverlaps()`, `ignoreCollisionPair(a, b)`, and Commands v3 `CadCollisionTriggers`.
+- **AdvantageScope 3D Pipeline**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, `CollisionDetails`, and `/YACSim/Rollers/<name>/` over NT4, exports ready-to-load `Robot_<Name>` AdvantageScope asset bundles with ordered multi-axis rotations and camera frustums, and imports existing `Robot_<Name>/config.json` directories in one line (`fromAdvantageScopeDir`).
+- **SystemCore 2 GB Performance**: Benchmarked against FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 *Darwin* CAD assets (2.1M+ triangles across 5 `.glb` meshes) under a strict `-Xmx256m` robot JVM cap with `~0.64 ms` `robotPeriodic()` telemetry overhead and zero steady-state loop overruns.
 
-## Quickstart
+## Quickstart (Pass-Through Factory)
 
 ```java
-CadRobotConfig config =
-    new CadRobotConfig("MyRobot")
-        .withChassisAsset(new CadAssetConfig(modelsDir.resolve("chassis.glb")))
-        .withDrivetrainPoseSupplier(drive::getPose)
-        .withExtensionMargin(0.35, 1.85) // Auto-derived from chassis.glb bounds
-        .ignoreRestingOverlaps()         // Auto-silences resting coupled-linkage OBB overlaps
-        .autoGroundChassis()             // Shifts chassis minZ to 0.0 on the field carpet
-        .withAutoInstallToAdvantageScope() // Exports directly to AdvantageScope User Assets
-        .addComponent(
-            new CadComponentConfig("Arm", new CadAssetConfig(modelsDir.resolve("arm.glb")))
-                .withParentComponent("Chassis")
-                .withPoseSupplier(
-                    YamsCommands3Bridge.fromYamsArm(
-                        arm, new Translation3d(0.2, 0.0, 0.45), MotionAxis.Y)))
-        .addComponent(
-            new CadComponentConfig("Elevator", new CadAssetConfig(modelsDir.resolve("elevator.glb")))
-                .withParentComponent("Chassis")
-                .withPoseSupplier(
-                    YamsCommands3Bridge.fromYamsElevator(
-                        elevator, new Translation3d(0.0, 0.0, 0.1), MotionAxis.Z)));
+// Zero-overhead pass-through on real hardware (RobotBase.isReal());
+// full 3D URDF CAD binding + OBB physics in simulation (RobotBase.isSimulation()).
+YacSimYamsFactory yacsim =
+    YacSimYamsFactory.fromUrdfOrZip(
+        Filesystem.getDeployDirectory().toPath().resolve("yacsim/my_robot_urdf.zip"),
+        CadUrdfOptions.recommended()
+            .withJointAlias("revolute_1", "Turret")
+            .withJointAlias("revolute_8", "Hood")
+            .keepOnlyJoints(List.of("Turret", "Hood"))
+            .bakeUnboundLinksIntoChassis(true));
 
-CadRobotMechanism cadSim = new CadRobotMechanism(this, config);
+Pivot turret = yacsim.createPivot("Turret", pivotConfig, turretMotor);
+Arm hood = yacsim.createArm("Hood", armConfig, hoodMotor); // auto-chains onto rotating Turret!
+yacsim.startSimulator();
 ```
 
-Call `cadSim.periodic()` from `robotPeriodic()` and `cadSim.simulationPeriodic()` from `simulationPeriodic()` (or a `Notifier`).
+Call `yacsim.updateTelemetry()` from `robotPeriodic()` and `yacsim.simIterate()` from `simulationPeriodic()` (or a `Notifier`). For full manual Java control without `YacSimYamsFactory`, see [Getting Started](docs/GETTING_STARTED.md) and [Native Onshape URDF Guide](docs/ONSHAPE_URDF_GUIDE.md).
 
 ## Documentation
 
 | Guide | Description |
 | --- | --- |
 | [Getting Started](docs/GETTING_STARTED.md) · [Implementation Walkthrough](docs/IMPLEMENTATION_WALKTHROUGH.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
-| [Guides](docs/GUIDES.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
+| [Guides](docs/GUIDES.md) · [Native Onshape URDF Guide](docs/ONSHAPE_URDF_GUIDE.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, code-side CAD repair, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and public *Darwin* CAD walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
-| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (42 tests) and how to run them |
-| [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and Darwin benchmarks |
-| [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027` & `darwin_6328_2027`) |
+| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (**61 JUnit 5 tests**) + **9 Python exporter tests** |
+| [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and public *Darwin* CAD benchmarks |
+| [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027`, `darwin_6328_2027`, `darwin_6328_manifest_2027`, `gears_2181_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |
 
 ## Building Locally
@@ -79,6 +72,16 @@ cd vendordep
 .\gradlew build test javadoc "-Dorg.gradle.java.home=C:\Users\Public\wpilib\2027_alpha7\jdk"
 ```
 
+## Open-Source Inspiration & Attribution
+
+YACSim is an **independent community project** inspired by the public open-source work of the FRC software ecosystem:
+
+- **[WPILib (2027 Alpha / Commands v3)](https://github.com/wpilibsuite/allwpilib):** Core robot framework, WPILib Units, SE(3) geometry (`Pose3d` / `Transform3d`), and NetworkTables v4 struct serialization.
+- **[AdvantageScope](https://docs.advantagescope.org/) (FRC Team 6328 Mechanical Advantage):** 3D Field custom robot asset format (`config.json`, `model*.glb`, `NOSIMPLIFY` mesh tags) and NT4 `Pose3d[]` visualization conventions. The `darwin_6328_*` examples independently reference Team 6328's publicly released MIT-licensed 2026 *Darwin* CAD assets ([RobotCode2026Public](https://github.com/Mechanical-Advantage/RobotCode2026Public)) as a high-poly benchmark.
+- **[Yet Another Software Suite (YASS / YAMS / YAGSL)](https://www.yassrobotics.com/):** Mechanism simulation APIs (`Arm`, `Elevator`, `Pivot`, `FlyWheel`, `SwerveDrive`), split `core`/`commands3` packaging architecture, and LGPL-3.0 licensing model.
+
+*Disclaimer: YACSim is developed independently and is not officially affiliated with, endorsed by, built by, or tested by FRC Team 6328 Mechanical Advantage, Yet Another Software Suite (YASS), WPILib, or any other third-party FRC team.*
+
 ## License
 
-Licensed under **LGPL-3.0**, matching Yet Another Software Suite (YASS) / YAMS.
+Licensed under **LGPL-3.0**.
