@@ -250,5 +250,102 @@ class OnshapeExporterTest(unittest.TestCase):
             self.assertIn("NORMAL", gltf["meshes"][0]["primitives"][0]["attributes"])
 
 
+
+    def test_skips_planar_mates_and_applies_rename_map(self) -> None:
+        from yacsim_onshape_exporter import parse_rename_map
+        asm_def = {
+            "rootAssembly": {
+                "instances": [
+                    {"id": "c", "name": "Chassis"},
+                    {"id": "p", "name": "StaticPlate"},
+                    {"id": "t", "name": "TurretSub"},
+                ],
+                "occurrences": [],
+                "features": [
+                    {
+                        "id": "f1",
+                        "featureType": "mate",
+                        "featureData": {
+                            "name": "Planar 1",
+                            "mateType": "PLANAR",
+                            "matedEntities": [{"matedOccurrence": ["c"]}, {"matedOccurrence": ["p"]}],
+                        },
+                    },
+                    {
+                        "id": "f2",
+                        "featureType": "mate",
+                        "featureData": {
+                            "name": "Revolute 1",
+                            "mateType": "REVOLUTE",
+                            "matedEntities": [
+                                {"matedOccurrence": ["c"], "matedCS": {"origin": [0.13335, 0.13335, 0.417], "zAxis": [0, 0, 1]}},
+                                {"matedOccurrence": ["t"]},
+                            ],
+                        },
+                    },
+                ],
+            }
+        }
+        # Whole-robot bbox (0.8 m wide) must NOT leak into roller radius
+        big_bbox = {"lowX": -0.4, "highX": 0.4, "lowY": -0.4, "highY": 0.4, "lowZ": 0.0, "highZ": 0.7}
+        manifest = build_manifest_from_onshape_payloads(
+            robot_name="CleanBot",
+            source_url=DARWIN_URL,
+            assembly_def=asm_def,
+            bboxes=big_bbox,
+            generate_roller_meshes=False,
+            only_named_mates=True,
+            rename_map=parse_rename_map("Revolute_1=Turret:revolute"),
+        )
+        self.assertEqual(len(manifest["joints"]), 1)
+        self.assertEqual(manifest["joints"][0]["name"], "Turret")
+        self.assertEqual(manifest["joints"][0]["type"], "revolute")
+
+
+
+    def test_prefix_filter_selects_and_strips_yacsim_prefix(self) -> None:
+        asm_def = {
+            "rootAssembly": {
+                "instances": [{"id": "c", "name": "Chassis"}, {"id": "a", "name": "IntakeArm"}],
+                "occurrences": [],
+                "features": [
+                    {
+                        "id": "m1",
+                        "featureType": "mate",
+                        "featureData": {
+                            "name": "Revolute 99",
+                            "mateType": "REVOLUTE",
+                            "matedEntities": [{"matedOccurrence": ["c"]}, {"matedOccurrence": ["a"]}],
+                        },
+                    },
+                    {
+                        "id": "m2",
+                        "featureType": "mate",
+                        "featureData": {
+                            "name": "yacsim_IntakeArm",
+                            "mateType": "REVOLUTE",
+                            "minLimit": -0.1,
+                            "maxLimit": 2.2,
+                            "matedEntities": [
+                                {"matedOccurrence": ["c"], "matedCS": {"origin": [0.3, 0.0, 0.2], "zAxis": [0, 1, 0]}},
+                                {"matedOccurrence": ["a"]},
+                            ],
+                        },
+                    },
+                ],
+            }
+        }
+        manifest = build_manifest_from_onshape_payloads(
+            robot_name="PrefixBot",
+            source_url=DARWIN_URL,
+            assembly_def=asm_def,
+            generate_roller_meshes=False,
+            mate_prefix="yacsim_",
+        )
+        self.assertEqual(len(manifest["joints"]), 1)
+        self.assertEqual(manifest["joints"][0]["name"], "IntakeArm")
+        self.assertEqual(manifest["links"][0]["name"], "IntakeArm")
+
+
 if __name__ == "__main__":
     unittest.main()

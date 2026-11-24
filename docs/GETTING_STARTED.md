@@ -120,3 +120,5 @@ YamsCommands3Bridge.bindFromManifest(robotConfig, "Hood", hood.getArm());
 ```
 
 If you want to automatically fetch `yacsim-robot.json` and `.glb` meshes directly from Onshape, install **Python 3.10+** and link your Onshape API keys using the [Onshape Exporter Guide](ONSHAPE_EXPORTER_GUIDE.md) (Python is only needed for the exporter CLI, never for manual Java setup or robot runtime). See the [CAD Manifest & URDF Automation Guide](CAD_MANIFEST_GUIDE.md) and the [`darwin_6328_manifest_2027`](../examples/commands3/darwin_6328_manifest_2027/README.md) example for details.
+
+- **CAD-to-Code Naming Conventions**: See [CAD_CODE_NAMING_CONVENTIONS.md](CAD_CODE_NAMING_CONVENTIONS.md) for aligning Onshape subassemblies and mates with your Java mechanisms.

@@ -25,3 +25,5 @@ __pycache__/
 examples/**/darwin_onshape/
 examples/**/src/main/deploy/yacsim/**/model.glb
 examples/**/src/main/deploy/yacsim/**/model_[0-3].glb
+examples/**/gears2181_onshape_live/
+!examples/commands3/gears_2181_2027/src/main/deploy/yacsim/gears2181/*.glb

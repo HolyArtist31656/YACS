@@ -347,4 +347,41 @@ class CadManifestLoaderTest {
     assertTrue(cfg.hasComponent("IntakeRollerMesh"));
     assertFalse(cfg.getComponents().get(1).isCollisionEnabled());
   }
+
+  @Test
+  void matchesCadAndCodeNamesCaseAndSeparatorInsensitively(@TempDir Path dir) throws Exception {
+    Files.writeString(dir.resolve("chassis.stl"), UNIT_CUBE_STL, StandardCharsets.UTF_8);
+    Files.writeString(dir.resolve("arm.stl"), UNIT_CUBE_STL, StandardCharsets.UTF_8);
+
+    String json =
+        """
+        {
+          "schemaVersion": "1.0",
+          "robotName": "NamingConventionBot",
+          "chassis": { "name": "Chassis", "meshFile": "chassis.stl" },
+          "links": [
+            { "name": "yacsim_Intake_Arm", "meshFile": "arm.stl" }
+          ],
+          "joints": [
+            {
+              "name": "yacsim_Intake_Arm",
+              "type": "revolute",
+              "parentLink": "Chassis",
+              "childLink": "yacsim_Intake_Arm",
+              "originMeters": [0.3, 0.0, 0.2],
+              "axis": "Y"
+            }
+          ]
+        }
+        """;
+    Path manifestFile = dir.resolve("yacsim-robot.json");
+    Files.writeString(manifestFile, json, StandardCharsets.UTF_8);
+
+    CadRobotConfig cfg = CadRobotConfig.fromManifest(manifestFile);
+    CadRobotManifest manifest = cfg.getManifest().orElseThrow();
+    assertEquals("yacsim_Intake_Arm", manifest.getJoint("IntakeArm").name());
+    assertEquals("yacsim_Intake_Arm", manifest.getJoint("intake arm").name());
+    assertTrue(cfg.hasComponent("IntakeArm"));
+    assertTrue(cfg.hasComponent("intake_arm"));
+  }
 }

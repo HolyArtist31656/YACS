@@ -192,3 +192,9 @@ CadManifestLoader.writeJson(manifest, Path.of("yacsim-robot.json"));
 ## 5. Complete Reference Example: FRC 6328 *Darwin* (Manifest-Driven)
 
 See [`examples/commands3/darwin_6328_manifest_2027/`](../examples/commands3/darwin_6328_manifest_2027/README.md) for a full working 2027 Commands v3 robot powered by `src/main/deploy/yacsim/darwin/yacsim-robot.json` referencing Darwin's Onshape assembly ([Onshape](https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264)).
+
+---
+
+## 6. Recommended CAD-to-Code Naming Conventions
+
+See the [CAD-to-Code Naming Conventions Guide](CAD_CODE_NAMING_CONVENTIONS.md) for how to align Onshape subassembly/mate names with your Java mechanisms (plus YACSim's forgiving case/separator/`yacsim_`-prefix name matching).

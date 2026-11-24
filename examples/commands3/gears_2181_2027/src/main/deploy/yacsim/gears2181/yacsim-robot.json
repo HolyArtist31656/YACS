@@ -1,0 +1,315 @@
+{
+  "schemaVersion": "1.0",
+  "robotName": "GEARS_2181",
+  "sourceUrl": "https://github.com/FRCteam2181/2026-Comp-Code",
+  "extensionXyMarginMeters": 0.35,
+  "extensionMaxHeightMeters": 1.85,
+  "ignoreRestingOverlaps": true,
+  "autoGroundChassis": false,
+  "disableAdvantageScopeSimplification": false,
+  "chassis": {
+    "name": "Chassis",
+    "meshFile": "model.glb",
+    "zeroedPosition": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "zeroedRotations": [],
+    "massProperties": {
+      "volumeCubicMeters": 0.025,
+      "massKilograms": 50.0,
+      "centerOfMassMeters": [
+        0.0,
+        0.0,
+        0.2
+      ],
+      "ixxKgM2": 3.4,
+      "iyyKgM2": 4.0,
+      "izzKgM2": 5.2
+    },
+    "collisionEnabled": true
+  },
+  "links": [
+    {
+      "name": "IntakeArm",
+      "meshFile": "model_0.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "massProperties": {
+        "massKilograms": 0.453592,
+        "centerOfMassMeters": [
+          0.22,
+          0.0,
+          0.0
+        ],
+        "ixxKgM2": 0.02,
+        "iyyKgM2": 0.126,
+        "izzKgM2": 0.126
+      },
+      "collisionEnabled": true
+    },
+    {
+      "name": "Turret",
+      "meshFile": "model_1.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "massProperties": {
+        "massKilograms": 4.5,
+        "centerOfMassMeters": [
+          0.0,
+          0.0,
+          0.08
+        ],
+        "ixxKgM2": 0.15,
+        "iyyKgM2": 0.15,
+        "izzKgM2": 0.2
+      },
+      "collisionEnabled": true
+    },
+    {
+      "name": "Climber",
+      "meshFile": "model_2.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "massProperties": {
+        "massKilograms": 3.0,
+        "centerOfMassMeters": [
+          0.0,
+          0.0,
+          0.175
+        ],
+        "ixxKgM2": 0.05,
+        "iyyKgM2": 0.05,
+        "izzKgM2": 0.05
+      },
+      "collisionEnabled": true
+    },
+    {
+      "name": "ShooterMesh",
+      "meshFile": "model_3.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "collisionEnabled": false
+    },
+    {
+      "name": "SpindexerMesh",
+      "meshFile": "model_4.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "collisionEnabled": false
+    },
+    {
+      "name": "TopIntakeMesh",
+      "meshFile": "model_5.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "collisionEnabled": false
+    },
+    {
+      "name": "InputMesh",
+      "meshFile": "model_6.glb",
+      "zeroedPosition": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "zeroedRotations": [],
+      "collisionEnabled": false
+    }
+  ],
+  "joints": [
+    {
+      "name": "IntakeArm",
+      "type": "revolute",
+      "parentLink": "Chassis",
+      "childLink": "IntakeArm",
+      "originMeters": [
+        0.3,
+        0.0,
+        0.2
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Y",
+      "inverted": true,
+      "minLimit": -0.08726646,
+      "maxLimit": 2.26892803,
+      "softMinLimit": -0.31415927,
+      "softMaxLimit": 2.19911486,
+      "startingPosition": 0.0,
+      "lengthMeters": 0.9144
+    },
+    {
+      "name": "Turret",
+      "type": "revolute",
+      "parentLink": "Chassis",
+      "childLink": "Turret",
+      "originMeters": [
+        0.13335,
+        -0.13335,
+        0.430403
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        3.14159265
+      ],
+      "axis": "Z",
+      "inverted": false,
+      "minLimit": -1.88495559,
+      "maxLimit": 1.88495559,
+      "softMinLimit": -1.57079633,
+      "softMaxLimit": 1.57079633,
+      "startingPosition": 0.0,
+      "momentOfInertiaKgM2": 0.2
+    },
+    {
+      "name": "Climber",
+      "type": "prismatic",
+      "parentLink": "Chassis",
+      "childLink": "Climber",
+      "originMeters": [
+        -0.28,
+        0.0,
+        0.2
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Z",
+      "inverted": false,
+      "minLimit": 0.0,
+      "maxLimit": 0.6,
+      "softMinLimit": 0.0,
+      "softMaxLimit": 0.55,
+      "startingPosition": 0.0,
+      "wheelRadiusMeters": 0.0254
+    },
+    {
+      "name": "Shooter",
+      "type": "continuous",
+      "parentLink": "Turret",
+      "childLink": "ShooterMesh",
+      "originMeters": [
+        0.0,
+        0.0,
+        0.16
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Y",
+      "wheelRadiusMeters": 0.0508,
+      "momentOfInertiaKgM2": 0.0024
+    },
+    {
+      "name": "Spindexer",
+      "type": "continuous",
+      "parentLink": "Chassis",
+      "childLink": "SpindexerMesh",
+      "originMeters": [
+        -0.05,
+        0.0,
+        0.22
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Z",
+      "wheelRadiusMeters": 0.0508,
+      "momentOfInertiaKgM2": 0.0012
+    },
+    {
+      "name": "TopIntake",
+      "type": "continuous",
+      "parentLink": "IntakeArm",
+      "childLink": "TopIntakeMesh",
+      "originMeters": [
+        0.42,
+        0.0,
+        0.0
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Y",
+      "wheelRadiusMeters": 0.0508,
+      "momentOfInertiaKgM2": 0.0012
+    },
+    {
+      "name": "Input",
+      "type": "continuous",
+      "parentLink": "Chassis",
+      "childLink": "InputMesh",
+      "originMeters": [
+        0.08,
+        -0.1,
+        0.3
+      ],
+      "originRpyRadians": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "axis": "Y",
+      "wheelRadiusMeters": 0.0508,
+      "momentOfInertiaKgM2": 0.0012
+    }
+  ],
+  "cameras": [
+    {
+      "name": "PhotonCamera",
+      "position": [
+        0.3,
+        0.0,
+        0.42
+      ],
+      "rpyRadians": [
+        0.0,
+        -0.261799,
+        0.0
+      ],
+      "fovDegrees": 70.0,
+      "resolution": [
+        1280,
+        800
+      ]
+    }
+  ]
+}

@@ -518,27 +518,30 @@ public final class CadRobotConfig {
       String componentName, Supplier<Pose3d> poseSupplier) {
     Objects.requireNonNull(componentName, "componentName");
     Objects.requireNonNull(poseSupplier, "poseSupplier");
-    for (CadComponentConfig comp : components) {
-      if (comp.getName().equals(componentName)) {
-        comp.withPoseSupplier(poseSupplier);
-        return this;
-      }
+    Optional<CadComponentConfig> match = findComponentByName(componentName);
+    if (match.isPresent()) {
+      match.get().withPoseSupplier(poseSupplier);
+      return this;
     }
+    List<String> avail = components.stream().map(CadComponentConfig::getName).toList();
     throw new IllegalArgumentException(
-        "No component named '" + componentName + "' in CadRobotConfig '" + robotName + "'.");
+        "No component named '"
+            + componentName
+            + "' in CadRobotConfig '"
+            + robotName
+            + "'. Available components: "
+            + avail);
   }
 
   /**
-   * Returns whether a visual component with the given name is registered in this config.
+   * Returns whether a visual component with the given name is registered in this config (exact
+   * match first, then case/separator-insensitive via {@link CadRobotManifest#normalizeName}).
    *
    * @param componentName Component name to check.
    * @return {@code true} if present.
    */
   public boolean hasComponent(String componentName) {
-    if (componentName == null) {
-      return false;
-    }
-    return components.stream().anyMatch(c -> c.getName().equals(componentName));
+    return findComponentByName(componentName).isPresent();
   }
 
   /**
@@ -548,12 +551,21 @@ public final class CadRobotConfig {
    * @return Registered pose supplier, or empty if no component with that name exists.
    */
   public Optional<Supplier<Pose3d>> getComponentPoseSupplier(String componentName) {
+    return findComponentByName(componentName).map(CadComponentConfig::getPoseSupplier);
+  }
+
+  private Optional<CadComponentConfig> findComponentByName(String componentName) {
     if (componentName == null) {
       return Optional.empty();
     }
+    Optional<CadComponentConfig> exact =
+        components.stream().filter(c -> c.getName().equals(componentName)).findFirst();
+    if (exact.isPresent()) {
+      return exact;
+    }
+    String target = CadRobotManifest.normalizeName(componentName);
     return components.stream()
-        .filter(c -> c.getName().equals(componentName))
-        .map(CadComponentConfig::getPoseSupplier)
+        .filter(c -> CadRobotManifest.normalizeName(c.getName()).equals(target))
         .findFirst();
   }
 

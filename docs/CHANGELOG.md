@@ -1,3 +1,11 @@
+## [2027.2.1-alpha1] — Live Onshape Hardening, CAD-to-Code Naming Conventions & FRC 2181 Example
+
+### Added
+- **FRC Team 2181 GEARS Example (`examples/commands3/gears_2181_2027/`)**: Full port of `FRCteam2181/2026-Comp-Code` to WPILib 2027 Commands v3, REVLib 2027 (`SparkMax`/`SparkFlex` with `CANPort.CAN_S0`), YAMS 2027 (`SparkWrapper`), and YACSim (`IntakeArm`, `Turret`, `Climber`, `Shooter`, `Spindexer`, `TopIntake`, `Input`).
+- **Forgiving CAD-to-Code Name Matching**: `CadRobotManifest.normalizeName(...)` + case/separator/`yacsim_`-prefix-insensitive fallback on `getJoint`, `getLink`, `hasComponent`, `getComponentPoseSupplier`, and `withComponentPoseSupplier` (with available-name lists in error messages).
+- **Onshape Exporter Live-CAD Upgrades**: Automatic text `.gltf`/`.zip` -> binary GLB 2.0 conversion (~39% smaller), native Z-up default (`--gltf-yup` optional), 1-DOF actuated mate filter (skips `PLANAR`/`PARALLEL`/`TANGENT`), `coarse` default with `>30 MB` warning, `--list-mates`, `--only-named`, `--rename`, and `--prefix yacsim_`.
+- **Documentation & Tests**: Added `docs/CAD_CODE_NAMING_CONVENTIONS.md`, expanded `docs/ONSHAPE_EXPORTER_GUIDE.md` with Python + Onshape API key setup and troubleshooting; **42 JUnit 5 tests across 9 classes** + **9 Python exporter unit tests**.
+
 ## [2027.2.0-alpha1] — Phase 2 Onshape Exporter & 3D Spinning Roller Visualization
 
 ### Added

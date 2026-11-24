@@ -275,3 +275,5 @@ Want CAD to feed your mesh paths, AdvantageScope zeroing, exact mass/inertia ten
 
 - Read the full [CAD Manifest & URDF Automation Guide](CAD_MANIFEST_GUIDE.md).
 - Compare the manual [`darwin_6328_2027`](../examples/commands3/darwin_6328_2027/) example against the manifest-driven [`darwin_6328_manifest_2027`](../examples/commands3/darwin_6328_manifest_2027/README.md) example.
+
+- **CAD-to-Code Naming Conventions**: See [CAD_CODE_NAMING_CONVENTIONS.md](CAD_CODE_NAMING_CONVENTIONS.md) for aligning Onshape subassemblies and mates with your Java mechanisms.

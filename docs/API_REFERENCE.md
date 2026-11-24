@@ -184,3 +184,4 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `poseSupplierFromManifest(CadRobotManifest, String, Arm\|Elevator\|Pivot)` | `YamsCommands3Bridge` | Returns the manifest-derived `Supplier<Pose3d>` for composition or custom inspection. |
 
 | `getComponentPoseSupplier(String)` | `CadRobotConfig` | Returns `Optional<Supplier<Pose3d>>` for automatic parent-mounted roller chaining in `YamsCommands3Bridge.bindFromManifest`. |
+| `normalizeName(String)` | `CadRobotManifest` | Canonicalizes CAD/Java names (strips `yacsim_` prefix, spaces, hyphens, underscores, lowercases) for forgiving link/joint/component lookup. |

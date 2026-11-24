@@ -137,3 +137,27 @@ The exporter computes every link's AdvantageScope `zeroedPosition` and `zeroedRo
 ```powershell
 python -m unittest discover -s tools/onshape-exporter -p "test_*.py" -v
 ```
+
+---
+
+## 8. CLI Reference & Real-World Troubleshooting
+
+| Flag | Default | Purpose |
+| :--- | :--- | :--- |
+| `--url <URL>` | *(required for live export)* | Onshape Assembly tab URL (`/documents/<did>/<w\|v\|m>/<wvmid>/e/<eid>`). |
+| `--robot-name <Name>` | `OnshapeRobot` | Display/export name used in `Robot_<Name>` for AdvantageScope. |
+| `--out <Dir>` | *(required for export)* | Output folder for `yacsim-robot.json` and `model*.glb`. |
+| `--resolution` | `coarse` | Onshape tessellation (`coarse`, `medium`, `fine`). Keep `coarse` for full FRC robots. |
+| `--list-mates` | off | Prints all 1-DOF mates (`REVOLUTE`, `CYLINDRICAL`, `SLIDER`) with child part names and XYZ origins in ~2s without downloading `.glb`s. |
+| `--prefix <Prefix>` | none | Exports only mates starting with `<Prefix>` (e.g., `--prefix yacsim_`) and strips the prefix in `yacsim-robot.json`. |
+| `--only-named` | off | Skips default Onshape names (`Revolute_1`, `Slider_2`, etc.) unless mapped in `--rename`. |
+| `--rename <Map>` | none | Renames default mates and optionally sets type: `Revolute_1=Turret:revolute,Slider_1=Climber:prismatic`. |
+| `--gltf-yup` | off | Applies `x: 90, z: 90` Y-up -> Z-up conversion (Onshape REST API GLTF is natively Z-up, so leave this off for Onshape). |
+| `--augment-rollers <JSON>` | none | Offline mode: generates color-striped 3D spinning roller `.glb` meshes for all `continuous` joints in an existing manifest. |
+
+### Common Issues & Fixes
+- **`403 Forbidden` on `/assemblies/...` (while `/elements` works)**: The Onshape document is shared as **View-only with Copy/Export disabled**. Run against a document where your account has Edit/Export permission (or click **Make a copy** if enabled).
+- **Robot lies on its side in AdvantageScope**: Onshape REST API GLTF exports are already Z-up (`zeroedRotations: []`). Only pass `--gltf-yup` for Y-up exporters.
+- **Onshape returned text `.gltf` or `.zip`**: Handled automatically—the exporter detects text `.gltf` (with embedded base64 buffers) and `.zip` outputs and packs them into binary GLB 2.0 (cutting file size ~39%).
+- **Huge `model.glb` (> 30 MB)**: Suppress bolts/fasteners/bearings in a simplified Onshape configuration and keep `--resolution coarse`.
+- **Mechanisms don't move separately in AdvantageScope**: Follow the [CAD-to-Code Naming Conventions Guide](CAD_CODE_NAMING_CONVENTIONS.md) to group moving mechanisms into Onshape Subassemblies.

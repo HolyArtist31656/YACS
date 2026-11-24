@@ -1,6 +1,6 @@
 # Unit Tests
 
-YACSim includes **8 JUnit 5 test classes (41 tests)** under `vendordep/src/test/java/yacsim/`. All tests run headless on desktop without requiring a roboRIO or SystemCore.
+YACSim includes **8 JUnit 5 test classes (42 tests)** under `vendordep/src/test/java/yacsim/`. All tests run headless on desktop without requiring a roboRIO or SystemCore.
 
 ## Running Tests
 
@@ -30,7 +30,7 @@ cd vendordep
 | `MinimalJsonTest` | `yacsim.core.util` | 1 | `roundTripsNestedJsonCleanly` — Round-trips nested objects, arrays, strings, booleans, nulls, and numbers through `MinimalJson.parse` and `toPrettyJson`. |
 | `YamsMechanismBridgeTest` | `yacsim.core.yams` | 8 | `fromAngleSupplierComputesPivotPoseAndSupportsInversion`, `fromDistanceSupplierComputesLinearPoseAlongAxisAndZeroOffset`, `chainParentChildComposesNestedMechanismTransforms`, `estimatesParallelAxisMomentOfInertiaAndMassFromMeshMetadata`, `fromCascadingElevatorScalesStageHeightsProportionally`, `fromFourBarKeepsEndEffectorLevelAlongArc`, `fromSpinningWheelAndMountedRollerComposeParentAndSpinRotation`, and `fromAngularVelocityIntegratesSpinAngleWithoutNaN`. |
 
-### `yacsim.core.manifest.CadManifestLoaderTest` (6 tests)
+### `yacsim.core.manifest.CadManifestLoaderTest` (7 tests)
 - `roundTripsManifestJsonAndProvidesYamsUnits` — Verifies full JSON load/serialize/reload round-trip, `sourceUrl` preservation, `getLinkMass`, `getJointMomentOfInertia`, angle/distance/diameter WPILib Units helpers, and camera parsing.
 - `importsStandardUrdfWithPackagePrefixAndInertia` — Verifies zero-dependency URDF XML parsing, `package://` mesh prefix stripping, root chassis detection, negative-axis inversion, and child-link inertia lookup.
 - `meshParserAppliesExactCadMassPropertiesFromManifest` — Verifies `CadRobotConfig.fromManifest` passes exact CAD `CadMassProperties` through `CadAssetConfig` into `MeshParser`.
@@ -38,5 +38,7 @@ cd vendordep
 - `rejectsInvalidJointTypeAndMissingComponentName` — Verifies clear `IllegalArgumentException` diagnostics for invalid joint types and unknown component names.
 - `exposesParentPoseSupplierForMountedRollersInManifest` — Verifies `CadRobotConfig.getComponentPoseSupplier(String)` and non-colliding roller mesh links for automatic parent-mounted roller chaining.
 
-### Python Onshape Exporter Tests (`tools/onshape-exporter/test_exporter.py`, 4 tests)
-- URL parsing, invalid URL rejection, mock Onshape assembly/mass/bbox extraction with striped roller GLB generation, and `--augment-rollers` offline round-trip.
+- `matchesCadAndCodeNamesCaseAndSeparatorInsensitively` — Verifies forgiving CAD-to-code name resolution across case, spaces, underscores, and optional `yacsim_` prefixes.
+
+### Python Onshape Exporter Tests (`tools/onshape-exporter/test_exporter.py`, 9 tests)
+- URL parsing, invalid URL rejection, mock Onshape assembly/mass/bbox extraction with striped roller GLB generation, `--augment-rollers` offline round-trip, SE(3) 4x4 zeroed-transform round-trip, `YACSIM_ORIGIN` frame alignment, `PLANAR` mate filtering, `--rename`, and `--prefix yacsim_` stripping.

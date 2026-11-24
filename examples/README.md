@@ -38,3 +38,7 @@ A real-robot port of [FRC Team 6328 Mechanical Advantage's 2026 robot (*Darwin*)
 ### 3. `commands3/darwin_6328_manifest_2027/` (Manifest-Driven CAD Automation)
 - **Robot**: FRC 6328 Mechanical Advantage *Darwin* (2026) referencing Darwin's [Onshape Assembly](https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264).
 - **Highlights**: Loads all meshes, AdvantageScope zeroing, exact CAD mass/inertia, joint pivots, axes, hard/soft limits, drum/wheel radii, and cameras from `src/main/deploy/yacsim/darwin/yacsim-robot.json` via `CadRobotConfig.fromManifest(...)` and `YamsCommands3Bridge.bindFromManifest(...)`, leaving only CAN IDs, motor types, gear ratios, and PID/FF gains in Java.
+
+### 4. `commands3/gears_2181_2027/` (FRC Team 2181 GEARS — REVLib 2027 + YAMS + YACSim)
+- **Robot**: Port of [FRCteam2181/2026-Comp-Code](https://github.com/FRCteam2181/2026-Comp-Code) (`main` branch) to WPILib 2027 Commands v3, REVLib 2027 (`SparkMax`/`SparkFlex`), YAMS 2027, and YACSim.
+- **Highlights**: All 7 mechanisms (`IntakeArm`, `Turret`, `Climber`, `Shooter`, `Spindexer`, `TopIntake`, `Input`) driven from `src/main/deploy/yacsim/gears2181/yacsim-robot.json` with automatic parent-mounted roller chaining (`TopIntake` riding on `IntakeArm`, `Shooter` riding on `Turret`), ready to drop in Team 2181's Onshape export with zero Java changes.

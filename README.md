@@ -63,9 +63,9 @@ Call `cadSim.periodic()` from `robotPeriodic()` and `cadSim.simulationPeriodic()
 | Guide | Description |
 | --- | --- |
 | [Getting Started](docs/GETTING_STARTED.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
-| [Guides](docs/GUIDES.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
+| [Guides](docs/GUIDES.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
-| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (41 tests) and how to run them |
+| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (42 tests) and how to run them |
 | [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and Darwin benchmarks |
 | [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027` & `darwin_6328_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |

@@ -2,8 +2,8 @@
 """YACSim Phase 2: Zero-dependency Onshape-to-YACSim CAD Exporter.
 
 Pulls assembly hierarchy, 4x4 occurrence transforms, mate definitions, exact CAD
-mass/inertia tensors, bounding boxes, roller/wheel radii, and per-subassembly
-glTF/GLB meshes from an Onshape assembly URL via Onshape REST API v6.
+mass/inertia tensors, bounding boxes, and per-subassembly glTF/GLB meshes from
+an Onshape assembly URL via Onshape REST API v6.
 
 Automatically computes AdvantageScope ``zeroedPosition`` and ``zeroedRotations``
 for every articulated link using:
@@ -18,42 +18,46 @@ import base64
 import json
 import os
 import re
+import struct
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from roller_glb_generator import generate_striped_roller_glb
 from se3_math import (
+    GLTF_YUP_TO_NWU_R,
     compute_zeroed_transform,
     mat3_from_mat4,
+    mat3_mul,
     mat3_to_advantagescope_rotations,
     mat4_from_mated_cs,
     mat4_identity,
     mat4_invert_rigid,
     mat4_mul,
     mat4_translation,
-    GLTF_YUP_TO_NWU_R,
-    mat3_mul,
 )
 
 ONSHAPE_URL_RE = re.compile(
     r"https?://(?P<host>[^/]+)/documents/(?P<did>[0-9a-fA-F]+)/(?P<wvm>[wvm])/(?P<wvmid>[0-9a-fA-F]+)/e/(?P<eid>[0-9a-fA-F]+)"
 )
 
-ROLLER_KEYWORDS = ("roller", "wheel", "flywheel", "kicker", "spinner", "intake_bar", "shooter")
+ACTUATED_MATE_TYPES = ("REVOLUTE", "CYLINDRICAL", "SLIDER")
+ROLLER_KEYWORDS = ("roller", "wheel", "flywheel", "kicker", "spinner", "intake_bar", "shooter", "spindexer")
 ORIGIN_CONNECTOR_NAMES = ("yacsim_origin", "origin_cube", "robot_origin")
+DEFAULT_MATE_NAME_RE = re.compile(r"^(revolute|cylindrical|slider|fastened|planar)_?\d+$", re.IGNORECASE)
 
 ROLLER_PALETTE: List[Tuple[Tuple[float, float, float, float], Tuple[float, float, float, float]]] = [
-    ((0.92, 0.25, 0.20, 1.0), (0.98, 0.92, 0.20, 1.0)),  # Red / Yellow (Flywheel)
-    ((0.15, 0.65, 0.95, 1.0), (0.95, 0.95, 0.95, 1.0)),  # Blue / White (KickerFront)
-    ((0.20, 0.80, 0.45, 1.0), (0.95, 0.95, 0.95, 1.0)),  # Green / White (KickerBack)
-    ((0.95, 0.55, 0.12, 1.0), (0.15, 0.15, 0.18, 1.0)),  # Orange / Charcoal (HopperRoller)
-    ((0.68, 0.28, 0.92, 1.0), (0.98, 0.88, 0.22, 1.0)),  # Purple / Gold (IntakeRoller)
+    ((0.92, 0.25, 0.20, 1.0), (0.98, 0.92, 0.20, 1.0)),  # Red / Yellow
+    ((0.15, 0.65, 0.95, 1.0), (0.95, 0.95, 0.95, 1.0)),  # Blue / White
+    ((0.20, 0.80, 0.45, 1.0), (0.95, 0.95, 0.95, 1.0)),  # Green / White
+    ((0.95, 0.55, 0.12, 1.0), (0.15, 0.15, 0.18, 1.0)),  # Orange / Charcoal
+    ((0.68, 0.28, 0.92, 1.0), (0.98, 0.88, 0.22, 1.0)),  # Purple / Gold
 ]
 
 
@@ -88,6 +92,69 @@ def parse_onshape_url(url: str) -> OnshapeDocumentRef:
         wvmid=m.group("wvmid"),
         eid=m.group("eid"),
     )
+
+
+def parse_rename_map(raw: Optional[str]) -> Dict[str, Tuple[str, Optional[str]]]:
+    """Parses '--rename Revolute_1=Turret:revolute,Slider_1=Climber:prismatic'."""
+    out: Dict[str, Tuple[str, Optional[str]]] = {}
+    if not raw:
+        return out
+    for entry in raw.split(","):
+        entry = entry.strip()
+        if not entry or "=" not in entry:
+            continue
+        src, dst = entry.split("=", 1)
+        src_key = re.sub(r"[^A-Za-z0-9_]+", "_", src.strip()).strip("_")
+        if ":" in dst:
+            new_name, forced_type = dst.split(":", 1)
+            out[src_key] = (new_name.strip(), forced_type.strip().lower())
+        else:
+            out[src_key] = (dst.strip(), None)
+    return out
+
+
+def _gltf_json_to_glb(gltf_bytes: bytes, bin_bytes: bytes = b"") -> bytes:
+    """Converts a text .gltf JSON (with embedded data: URI or separate .bin) into binary GLB 2.0."""
+    doc = json.loads(gltf_bytes.decode("utf-8"))
+    if not bin_bytes and doc.get("buffers"):
+        uri = doc["buffers"][0].get("uri", "")
+        if uri.startswith("data:"):
+            bin_bytes = base64.b64decode(uri.split(",", 1)[1])
+            del doc["buffers"][0]["uri"]
+    elif doc.get("buffers") and "uri" in doc["buffers"][0]:
+        del doc["buffers"][0]["uri"]
+    if doc.get("buffers"):
+        doc["buffers"][0]["byteLength"] = len(bin_bytes)
+    jb = json.dumps(doc, separators=(",", ":")).encode("utf-8")
+    jb += b" " * ((4 - len(jb) % 4) % 4)
+    bb = bytearray(bin_bytes)
+    bb += b"\x00" * ((4 - len(bb) % 4) % 4)
+    total = 12 + 8 + len(jb) + (8 + len(bb) if bb else 0)
+    out = bytearray()
+    out += struct.pack("<III", 0x46546C67, 2, total)
+    out += struct.pack("<II", len(jb), 0x4E4F534A) + jb
+    if bb:
+        out += struct.pack("<II", len(bb), 0x004E4942) + bb
+    return bytes(out)
+
+
+def _normalize_onshape_gltf_to_glb(blob: bytes, output_path: Path) -> bytes:
+    """Ensures Onshape's GLTF translation output (text .gltf, .zip, or .glb) is saved as binary GLB 2.0."""
+    if blob[:4] == b"glTF":
+        return blob
+    if blob[:2] == b"PK":
+        import io
+        with zipfile.ZipFile(io.BytesIO(blob)) as zf:
+            names = zf.namelist()
+            glb_name = next((n for n in names if n.lower().endswith(".glb")), None)
+            if glb_name:
+                return zf.read(glb_name)
+            gltf_name = next(n for n in names if n.lower().endswith(".gltf"))
+            bin_name = next((n for n in names if n.lower().endswith(".bin")), None)
+            return _gltf_json_to_glb(zf.read(gltf_name), zf.read(bin_name) if bin_name else b"")
+    if blob.lstrip()[:1] == b"{":
+        return _gltf_json_to_glb(blob)
+    raise RuntimeError(f"Unexpected Onshape GLTF export format for {output_path.name}: {blob[:16]!r}")
 
 
 class OnshapeRestClient:
@@ -151,11 +218,10 @@ class OnshapeRestClient:
         wvm: Optional[str] = None,
         wvmid: Optional[str] = None,
         eid: Optional[str] = None,
-        resolution: str = "medium",
+        resolution: str = "coarse",
         poll_interval_sec: float = 2.0,
         max_wait_sec: float = 300.0,
     ) -> Path:
-        """Runs Onshape async GLTF/GLB translation for the root or any subassembly."""
         d = did or self.ref.did
         t_wvm = wvm or self.ref.wvm
         t_wvmid = wvmid or self.ref.wvmid
@@ -191,8 +257,15 @@ class OnshapeRestClient:
             f"/api/v6/documents/d/{d}/externaldata/{ext_ids[0]}",
             accept="application/octet-stream",
         )
+        blob = _normalize_onshape_gltf_to_glb(blob, output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(blob)
+        if len(blob) > 30 * 1024 * 1024:
+            print(
+                f"[Warning] {output_path.name} is {len(blob) / (1024 * 1024):.1f} MB; "
+                "consider suppressing fasteners/bolts in a simplified Onshape Display State or using --resolution coarse.",
+                file=sys.stderr,
+            )
         return output_path
 
 
@@ -208,23 +281,6 @@ def _dominant_axis(vec: List[float]) -> Tuple[str, bool]:
 def _is_roller_name(name: str) -> bool:
     low = name.lower()
     return any(kw in low for kw in ROLLER_KEYWORDS)
-
-
-def _estimate_roller_radius_from_bbox(bbox: Dict[str, Any], axis: str) -> Optional[float]:
-    low = bbox.get("lowX"), bbox.get("lowY"), bbox.get("lowZ")
-    high = bbox.get("highX"), bbox.get("highY"), bbox.get("highZ")
-    if any(v is None for v in (*low, *high)):
-        return None
-    dx = abs(float(high[0]) - float(low[0]))
-    dy = abs(float(high[1]) - float(low[1]))
-    dz = abs(float(high[2]) - float(low[2]))
-    if axis == "X":
-        diam = 0.5 * (dy + dz)
-    elif axis == "Y":
-        diam = 0.5 * (dx + dz)
-    else:
-        diam = 0.5 * (dx + dy)
-    return round(diam * 0.5, 6) if diam > 1e-4 else None
 
 
 def _extract_mass_props(raw_mp: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -251,7 +307,6 @@ def _extract_mass_props(raw_mp: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
 
 
 def _find_robot_origin_transform(root_asm: Dict[str, Any]) -> List[float]:
-    """Finds optional YACSIM_ORIGIN / ORIGIN_CUBE mate connector and returns T_cad_to_robot."""
     for feat in root_asm.get("features", []):
         if feat.get("featureType") != "mateConnector":
             continue
@@ -264,6 +319,47 @@ def _find_robot_origin_transform(root_asm: Dict[str, Any]) -> List[float]:
     return mat4_identity()
 
 
+def list_actuated_mates(assembly_def: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Returns a concise summary of all 1-DOF actuated mates (REVOLUTE, CYLINDRICAL, SLIDER)."""
+    root_asm = assembly_def.get("rootAssembly", {})
+    instances = {inst["id"]: inst for inst in root_asm.get("instances", []) if "id" in inst}
+    occurrences = {}
+    for occ in root_asm.get("occurrences", []):
+        path = tuple(occ.get("path") or [])
+        tf = occ.get("transform")
+        if path and tf and len(tf) == 16:
+            occurrences[path] = [float(v) for v in tf]
+
+    t_cad_to_robot = _find_robot_origin_transform(root_asm)
+    rows = []
+    for feat in root_asm.get("features", []):
+        if feat.get("featureType") != "mate":
+            continue
+        fd = feat.get("featureData", {})
+        mate_type = (fd.get("mateType") or "FASTENED").upper()
+        if mate_type not in ACTUATED_MATE_TYPES:
+            continue
+        mated = fd.get("matedEntities") or []
+        if len(mated) < 2:
+            continue
+        parent_path = tuple(mated[0].get("matedOccurrence") or [])
+        child_path = tuple(mated[1].get("matedOccurrence") or [])
+        child_inst = instances.get(child_path[-1], {}) if child_path else {}
+        t_parent = mat4_mul(t_cad_to_robot, occurrences.get(parent_path, mat4_identity()))
+        t_joint = mat4_mul(t_parent, mat4_from_mated_cs(mated[0].get("matedCS") or {}))
+        axis_name, inverted = _dominant_axis([t_joint[2], t_joint[6], t_joint[10]])
+        mate_name = re.sub(r"[^A-Za-z0-9_]+", "_", (fd.get("name") or feat.get("id") or "Mate").strip()).strip("_")
+        rows.append({
+            "mateName": mate_name,
+            "mateType": mate_type,
+            "childInstance": child_inst.get("name", "<unknown>"),
+            "childType": child_inst.get("type", "Part"),
+            "axis": ("-" if inverted else "+") + axis_name,
+            "originMeters": mat4_translation(t_joint),
+        })
+    return rows
+
+
 def build_manifest_from_onshape_payloads(
     robot_name: str,
     source_url: str,
@@ -273,13 +369,19 @@ def build_manifest_from_onshape_payloads(
     generate_roller_meshes: bool = True,
     output_dir: Optional[Path] = None,
     subassembly_export_plan: Optional[List[Dict[str, Any]]] = None,
+    only_named_mates: bool = False,
+    mate_prefix: Optional[str] = None,
+    rename_map: Optional[Dict[str, Tuple[str, Optional[str]]]] = None,
+    default_roller_radius_meters: float = 0.0508,
+    gltf_yup: bool = False,
 ) -> Dict[str, Any]:
     """Transforms Onshape Assembly Definition + Mass Properties + Bounding Boxes into yacsim-robot.json.
 
-    Automatically solves each link's exact ``zeroedPosition`` and ``zeroedRotations`` via
-    ``T_zero = (T_robot_to_joint)^-1 * T_robot_to_link`` from Onshape's 4x4 occurrence
-    transforms and mate coordinate systems—requiring zero manual anchor measurements.
+    Filters strictly to 1-DOF actuated mates (REVOLUTE, CYLINDRICAL, SLIDER), ignoring static
+    FASTENED/PLANAR/PARALLEL/TANGENT constraint mates, and solves exact AdvantageScope anchors via
+    ``T_zero = (T_robot_to_joint)^-1 * T_robot_to_link``.
     """
+    rename_map = rename_map or {}
     root_asm = assembly_def.get("rootAssembly", {})
     instances = {inst["id"]: inst for inst in root_asm.get("instances", []) if "id" in inst}
     occurrences: Dict[Tuple[str, ...], List[float]] = {}
@@ -294,13 +396,13 @@ def build_manifest_from_onshape_payloads(
 
     t_cad_to_robot = _find_robot_origin_transform(root_asm)
 
-    # Automatic chassis Z-grounding from assembly bounding box if available
     chassis_zero_pos = mat4_translation(t_cad_to_robot)
     if bboxes and bboxes.get("lowZ") is not None:
         chassis_zero_pos[2] = round(chassis_zero_pos[2] - float(bboxes["lowZ"]), 6)
-    chassis_zero_rots = mat3_to_advantagescope_rotations(
-        mat3_mul(mat3_from_mat4(t_cad_to_robot), GLTF_YUP_TO_NWU_R)
-    )
+    chassis_r = mat3_from_mat4(t_cad_to_robot)
+    if gltf_yup:
+        chassis_r = mat3_mul(chassis_r, GLTF_YUP_TO_NWU_R)
+    chassis_zero_rots = mat3_to_advantagescope_rotations(chassis_r)
 
     chassis_mp = _extract_mass_props(mass_props)
     chassis_entry: Dict[str, Any] = {
@@ -323,14 +425,29 @@ def build_manifest_from_onshape_payloads(
         if feat.get("featureType") != "mate":
             continue
         fd = feat.get("featureData", {})
-        mate_name = (fd.get("name") or feat.get("id") or f"Joint_{next_model_idx}").strip()
         mate_type = (fd.get("mateType") or "FASTENED").upper()
-        if mate_type == "FASTENED":
+        if mate_type not in ACTUATED_MATE_TYPES:
             continue
 
         mated = fd.get("matedEntities") or []
         if len(mated) < 2:
             continue
+
+        raw_mate_name = (fd.get("name") or feat.get("id") or f"Joint_{next_model_idx}").strip()
+        sanitized_name = re.sub(r"[^A-Za-z0-9_]+", "_", raw_mate_name).strip("_") or f"Link_{next_model_idx}"
+
+        if mate_prefix:
+            if not sanitized_name.lower().startswith(mate_prefix.lower()):
+                continue
+            sanitized_name = sanitized_name[len(mate_prefix):].lstrip('_')
+        if only_named_mates and sanitized_name not in rename_map and DEFAULT_MATE_NAME_RE.match(sanitized_name):
+            continue
+
+        forced_type: Optional[str] = None
+        if sanitized_name in rename_map:
+            child_name, forced_type = rename_map[sanitized_name]
+        else:
+            child_name = sanitized_name
 
         parent_occ_path = tuple(mated[0].get("matedOccurrence") or [])
         child_occ_path = tuple(mated[1].get("matedOccurrence") or [])
@@ -340,9 +457,7 @@ def build_manifest_from_onshape_payloads(
         parent_name = parent_inst.get("name", "Chassis")
         if parent_name not in seen_links:
             parent_name = "Chassis"
-        child_name = re.sub(r"[^A-Za-z0-9_]+", "_", mate_name).strip("_") or f"Link_{next_model_idx}"
 
-        # Resolve 4x4 occurrence transforms in robot frame
         t_parent_occ = occurrences.get(
             parent_occ_path, occ_by_leaf.get(parent_occ_path[-1], mat4_identity()) if parent_occ_path else mat4_identity()
         )
@@ -352,7 +467,6 @@ def build_manifest_from_onshape_payloads(
         t_robot_to_parent = mat4_mul(t_cad_to_robot, t_parent_occ)
         t_robot_to_link = mat4_mul(t_cad_to_robot, t_child_occ)
 
-        # Mate CS is defined in parent occurrence frame -> transform into robot frame
         mated_cs = mated[0].get("matedCS") or {}
         t_parent_to_joint = mat4_from_mated_cs(mated_cs)
         t_robot_to_joint = mat4_mul(t_robot_to_parent, t_parent_to_joint)
@@ -364,10 +478,13 @@ def build_manifest_from_onshape_payloads(
         min_lim = fd.get("minLimit")
         max_lim = fd.get("maxLimit")
 
-        is_roller = _is_roller_name(mate_name) or _is_roller_name(child_inst.get("name", ""))
-        if mate_type == "SLIDER":
+        if forced_type in ("revolute", "prismatic", "continuous", "fixed"):
+            j_type = forced_type
+        elif mate_type == "SLIDER":
             j_type = "prismatic"
-        elif is_roller or (mate_type in ("REVOLUTE", "CYLINDRICAL") and min_lim is None and max_lim is None):
+        elif _is_roller_name(child_name) or _is_roller_name(child_inst.get("name", "")):
+            j_type = "continuous"
+        elif mate_type in ("REVOLUTE", "CYLINDRICAL") and min_lim is None and max_lim is None:
             j_type = "continuous"
         else:
             j_type = "revolute"
@@ -377,10 +494,8 @@ def build_manifest_from_onshape_payloads(
 
         wheel_radius = None
         if j_type == "continuous":
-            if bboxes:
-                wheel_radius = _estimate_roller_radius_from_bbox(bboxes, axis_name)
-            if wheel_radius is None:
-                wheel_radius = 0.0254
+            # Never assign the whole-robot root bbox half-width as a wheel radius!
+            wheel_radius = default_roller_radius_meters
             if generate_roller_meshes and output_dir is not None:
                 c1, c2 = ROLLER_PALETTE[roller_color_idx % len(ROLLER_PALETTE)]
                 roller_color_idx += 1
@@ -395,9 +510,6 @@ def build_manifest_from_onshape_payloads(
             zeroed_pos = [0.0, 0.0, 0.0]
             zeroed_rots: List[Dict[str, Any]] = []
         else:
-            # Automatically solve exact AdvantageScope anchor transform from Onshape 4x4 matrices!
-            # Joint frame at runtime uses translation=origin and identity orientation (pure axis motion),
-            # so T_joint_runtime = [I, origin; 0, 1], giving T_zero = T_joint_runtime^-1 * T_robot_to_link.
             t_joint_runtime = [
                 1.0, 0.0, 0.0, origin[0],
                 0.0, 1.0, 0.0, origin[1],
@@ -405,7 +517,7 @@ def build_manifest_from_onshape_payloads(
                 0.0, 0.0, 0.0, 1.0,
             ]
             zeroed_pos, zeroed_rots = compute_zeroed_transform(
-                t_joint_runtime, t_robot_to_link, include_gltf_yup_to_nwu=True
+                t_joint_runtime, t_robot_to_link, include_gltf_yup_to_nwu=gltf_yup
             )
             if (
                 subassembly_export_plan is not None
@@ -485,7 +597,7 @@ def augment_manifest_with_roller_meshes(
     for joint in manifest.get("joints", []):
         if str(joint.get("type", "")).lower() != "continuous":
             continue
-        radius = float(joint.get("wheelRadiusMeters") or 0.0254)
+        radius = float(joint.get("wheelRadiusMeters") or 0.0508)
         axis = str(joint.get("axis") or "Y").upper()
         joint_name = joint["name"]
         link_name = f"{joint_name}Mesh"
@@ -529,8 +641,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--url", help="Onshape assembly URL (https://cad.onshape.com/documents/.../e/...)")
     parser.add_argument("--robot-name", default="OnshapeRobot", help="Robot name for yacsim-robot.json")
     parser.add_argument("--out", type=Path, help="Output directory for yacsim-robot.json and model*.glb")
-    parser.add_argument("--resolution", default="medium", choices=("coarse", "medium", "fine"))
+    parser.add_argument("--resolution", default="coarse", choices=("coarse", "medium", "fine"))
     parser.add_argument("--skip-glb-export", action="store_true", help="Export manifest JSON only (skip Onshape GLTF download)")
+    parser.add_argument("--list-mates", action="store_true", help="Print all 1-DOF mates (name, child part, axis, origin) without exporting GLBs")
+    parser.add_argument("--only-named", action="store_true", help="Skip default Onshape names (Revolute_1, Slider_2, etc.) unless listed in --rename")
+    parser.add_argument("--prefix", help="Only export mates starting with this prefix (e.g. yacsim_) and strip it from the manifest name")
+    parser.add_argument("--rename", help="Map Onshape mate names to mechanism names/types: e.g. Revolute_1=Turret:revolute,Slider_1=Climber:prismatic")
+    parser.add_argument("--roller-radius", type=float, default=0.0508, help="Default wheel/roller radius in meters for continuous joints (default 0.0508 = 2 in)")
+    parser.add_argument("--gltf-yup", action="store_true", help="Apply Y-up -> Z-up (x:90, z:90) rotation for Y-up glTF exports (Onshape REST API GLTF is Z-up natively)")
     parser.add_argument(
         "--augment-rollers",
         type=Path,
@@ -544,8 +662,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         print(f"Augmented {args.augment_rollers} with {roller_count} spinning 3D roller .glb meshes.")
         return 0
 
-    if not args.url or not args.out:
-        parser.error("Provide either --augment-rollers <manifest.json> OR both --url <onshape_url> and --out <dir>.")
+    if not args.url:
+        parser.error("Provide --url <onshape_url> (or --augment-rollers <manifest.json>).")
 
     access_key = os.environ.get("ONSHAPE_ACCESS_KEY", "").strip()
     secret_key = os.environ.get("ONSHAPE_SECRET_KEY", "").strip()
@@ -561,6 +679,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     client = OnshapeRestClient(ref, access_key, secret_key)
     print(f"Fetching assembly definition from {ref.web_url} ...")
     asm_def = client.get_assembly_definition()
+
+    if args.list_mates:
+        rows = list_actuated_mates(asm_def)
+        print(f"Found {len(rows)} actuated 1-DOF mates (excluding FASTENED/PLANAR/etc.):")
+        print(f"{'Mate':<18} {'Type':<12} {'Axis':<5} {'Origin (m)':<32} {'Child Instance'}")
+        print("-" * 95)
+        for r in rows:
+            print(f"{r['mateName']:<18} {r['mateType']:<12} {r['axis']:<5} {str(r['originMeters']):<32} {r['childInstance']} ({r['childType']})")
+        return 0
+
+    if not args.out:
+        parser.error("Provide --out <dir> when exporting (or use --list-mates to inspect mates).")
+
     print("Fetching exact CAD mass properties & bounding boxes ...")
     mass_props = client.get_assembly_mass_properties()
     bboxes = client.get_assembly_bounding_boxes()
@@ -576,6 +707,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         generate_roller_meshes=True,
         output_dir=args.out,
         subassembly_export_plan=sub_plan,
+        only_named_mates=args.only_named,
+        mate_prefix=args.prefix,
+        rename_map=parse_rename_map(args.rename),
+        default_roller_radius_meters=args.roller_radius,
+        gltf_yup=args.gltf_yup,
     )
 
     if not args.skip_glb_export:

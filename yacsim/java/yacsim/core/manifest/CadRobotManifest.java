@@ -80,16 +80,44 @@ public record CadRobotManifest(
    * @param linkName Link name to look up.
    * @return Matching {@link CadLinkManifest}, if present.
    */
+  /**
+   * Normalizes a CAD or Java mechanism name for forgiving lookup (strips optional {@code yacsim_}
+   * prefix, spaces, hyphens, and underscores, and lowercases).
+   *
+   * @param raw Raw link, joint, or mechanism name.
+   * @return Canonical comparison key.
+   */
+  public static String normalizeName(String raw) {
+    if (raw == null) {
+      return "";
+    }
+    String cleaned = raw.trim().toLowerCase(java.util.Locale.ROOT);
+    if (cleaned.startsWith("yacsim_") || cleaned.startsWith("yacsim-") || cleaned.startsWith("yacsim ")) {
+      cleaned = cleaned.substring(7);
+    }
+    return cleaned.replaceAll("[\\s_\\-]+", "");
+  }
+
   public Optional<CadLinkManifest> findLink(String linkName) {
     Objects.requireNonNull(linkName, "linkName");
     if (chassis.isPresent() && chassis.get().name().equals(linkName)) {
       return chassis;
     }
-    return links.stream().filter(l -> l.name().equals(linkName)).findFirst();
+    Optional<CadLinkManifest> exact =
+        links.stream().filter(l -> l.name().equals(linkName)).findFirst();
+    if (exact.isPresent()) {
+      return exact;
+    }
+    String target = normalizeName(linkName);
+    if (chassis.isPresent() && normalizeName(chassis.get().name()).equals(target)) {
+      return chassis;
+    }
+    return links.stream().filter(l -> normalizeName(l.name()).equals(target)).findFirst();
   }
 
   /**
-   * Returns a link by name or throws an {@link IllegalArgumentException} if not found.
+   * Returns a link by name (exact match first, then case/separator-insensitive) or throws an
+   * {@link IllegalArgumentException} listing all available link names.
    *
    * @param linkName Link name to look up.
    * @return Matching {@link CadLinkManifest}.
@@ -97,24 +125,39 @@ public record CadRobotManifest(
   public CadLinkManifest getLink(String linkName) {
     return findLink(linkName)
         .orElseThrow(
-            () ->
-                new IllegalArgumentException(
-                    "Link '" + linkName + "' not found in CAD manifest for " + robotName + "."));
+            () -> {
+              List<String> avail = links.stream().map(CadLinkManifest::name).toList();
+              return new IllegalArgumentException(
+                  "Link '"
+                      + linkName
+                      + "' not found in CAD manifest for "
+                      + robotName
+                      + ". Available links: "
+                      + avail);
+            });
   }
 
   /**
-   * Finds a joint by name.
+   * Finds a joint by name (exact match first, then case/separator-insensitive, stripping any
+   * optional {@code yacsim_} prefix).
    *
    * @param jointName Joint name to look up.
    * @return Matching {@link CadJointManifest}, if present.
    */
   public Optional<CadJointManifest> findJoint(String jointName) {
     Objects.requireNonNull(jointName, "jointName");
-    return joints.stream().filter(j -> j.name().equals(jointName)).findFirst();
+    Optional<CadJointManifest> exact =
+        joints.stream().filter(j -> j.name().equals(jointName)).findFirst();
+    if (exact.isPresent()) {
+      return exact;
+    }
+    String target = normalizeName(jointName);
+    return joints.stream().filter(j -> normalizeName(j.name()).equals(target)).findFirst();
   }
 
   /**
-   * Returns a joint by name or throws an {@link IllegalArgumentException} if not found.
+   * Returns a joint by name (exact match first, then case/separator-insensitive) or throws an
+   * {@link IllegalArgumentException} listing all available joint names.
    *
    * @param jointName Joint name to look up.
    * @return Matching {@link CadJointManifest}.
@@ -122,9 +165,16 @@ public record CadRobotManifest(
   public CadJointManifest getJoint(String jointName) {
     return findJoint(jointName)
         .orElseThrow(
-            () ->
-                new IllegalArgumentException(
-                    "Joint '" + jointName + "' not found in CAD manifest for " + robotName + "."));
+            () -> {
+              List<String> avail = joints.stream().map(CadJointManifest::name).toList();
+              return new IllegalArgumentException(
+                  "Joint '"
+                      + jointName
+                      + "' not found in CAD manifest for "
+                      + robotName
+                      + ". Available joints: "
+                      + avail);
+            });
   }
 
   /**
