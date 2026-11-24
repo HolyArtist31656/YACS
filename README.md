@@ -7,7 +7,7 @@
 
 ![YACSim End-to-End Architecture Pipeline](docs/images/yacsim-architecture-pipeline.jpg)
 
-**YACSim** (`v2027.4.0-alpha1`) is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** designed to pair cleanly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
+**YACSim** (`v2027.5.0-alpha1`) is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** designed to pair cleanly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
 
 ## Online Installation (WPILib 2027 VS Code)
 
@@ -30,6 +30,7 @@ https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
 - **Native CAD Mesh Parsing (with glTF Node-Graph Transforms & In-Memory Cache)**: Parses `.glb` / `.gltf` (glTF 2.0 with recursive scene-graph `matrix` / `T*R*S` traversal), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
 - **Zero-Allocation Broadphase & 15-Axis SAT Collisions**: Pre-filters separated component pairs with bounding-sphere broadphase rejection before running allocation-free 15-axis SAT and extension-envelope checks, with `ignoreRestingOverlaps()`, `ignoreCollisionPair(a, b)`, and Commands v3 `CadCollisionTriggers`.
 - **AdvantageScope 3D Pipeline**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, `CollisionDetails`, and `/YACSim/Rollers/<name>/` over NT4, exports ready-to-load `Robot_<Name>` AdvantageScope asset bundles with ordered multi-axis rotations and camera frustums, and imports existing `Robot_<Name>/config.json` directories in one line (`fromAdvantageScopeDir`).
+- **3D RK4 Projectile Ballistics & Field Exporter (`v2027.5.0-alpha1`)**: Pure-Java `yacsim.core.ballistics` (RK4 gravity, quadratic drag, Magnus spin lift, 3D OBB target/obstacle collisions, and `TrajectoryArcPublisher` `Pose3d[]` aim arcs), dual-pose `SimTruthPose3d` (`SwerveDrive::getSimPose`), direct WPILib `DataLog` struct recording, and `tools/onshape-field-exporter/` (YAECE `SeasonConfig`, PathPlanner `navgrid.json`, and `yacsim-field.json`).
 - **SystemCore 2 GB Performance**: Benchmarked against FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 *Darwin* CAD assets (2.1M+ triangles across 5 `.glb` meshes) under a strict `-Xmx256m` robot JVM cap with `~0.64 ms` `robotPeriodic()` telemetry overhead and zero steady-state loop overruns.
 
 ## Quickstart (Pass-Through Factory)
@@ -60,7 +61,7 @@ Call `yacsim.updateTelemetry()` from `robotPeriodic()` and `yacsim.simIterate()`
 | [Getting Started](docs/GETTING_STARTED.md) · [Implementation Walkthrough](docs/IMPLEMENTATION_WALKTHROUGH.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
 | [Guides](docs/GUIDES.md) · [Native Onshape URDF Guide](docs/ONSHAPE_URDF_GUIDE.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, code-side CAD repair, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and public *Darwin* CAD walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
-| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (**61 JUnit 5 tests**) + **9 Python exporter tests** |
+| [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 9 JUnit 5 test classes (**67 JUnit 5 tests**) + **10 Python exporter tests** |
 | [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and public *Darwin* CAD benchmarks |
 | [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027`, `darwin_6328_2027`, `darwin_6328_manifest_2027`, `gears_2181_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |

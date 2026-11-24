@@ -903,6 +903,31 @@ public final class YamsCommands3Bridge {
   }
 
   /**
+   * Attaches animated 4-corner swerve steer forks and spinning wheels from a YAMS 2027 {@link
+   * SwerveDrive} AND binds {@code drive::getSimPose} as the ground-truth {@code SimTruthPose3d}
+   * alongside noisy fused odometry ({@code drive::getPose}).
+   *
+   * @param config Existing {@link CadRobotConfig} with a chassis asset.
+   * @param drive YAMS {@link SwerveDrive} instance.
+   * @param steerForkAsset Optional shared steer-fork CAD asset (may be {@code null}).
+   * @param wheelAsset Optional shared wheel CAD asset (may be {@code null}).
+   * @param wheelRadiusMeters Positive wheel radius in meters.
+   * @param moduleLocations Module mounting locations in chassis frame (typically FL, FR, BL, BR).
+   * @return The same {@code config} for fluent chaining.
+   */
+  public static CadRobotConfig attachSwerveModulesWithTruth(
+      CadRobotConfig config,
+      SwerveDrive drive,
+      CadAssetConfig steerForkAsset,
+      CadAssetConfig wheelAsset,
+      double wheelRadiusMeters,
+      List<Translation3d> moduleLocations) {
+    attachSwerveModules(
+        config, drive, steerForkAsset, wheelAsset, wheelRadiusMeters, moduleLocations);
+    return config.withSimTruthPose2dSupplier(drive::getSimPose);
+  }
+
+  /**
    * Drivetrain-agnostic overload attaching animated rotating steer forks and spinning wheels from
    * any swerve implementation (CTRE Phoenix 6 Swerve, REV MAXSwerve, AdvantageKit, or custom
    * odometry) onto an existing URDF- or manifest-loaded {@link CadRobotConfig}.

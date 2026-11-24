@@ -1,6 +1,6 @@
 # Unit Tests
 
-YACSim includes **8 JUnit 5 test classes (61 tests)** under `vendordep/src/test/java/yacsim/` plus **9 Python exporter unit tests** under `tools/onshape-exporter/test_exporter.py` (**70 automated tests total**). All tests run headless on desktop without requiring a roboRIO or SystemCore.
+YACSim includes **9 JUnit 5 test classes (67 tests)** under `vendordep/src/test/java/yacsim/` plus **10 Python exporter unit tests** under `tools/onshape-exporter/test_exporter.py` (**77 automated tests total**). All tests run headless on desktop without requiring a roboRIO or SystemCore.
 
 ## Running Tests
 
@@ -23,7 +23,7 @@ cd vendordep
 python -m pytest tools/onshape-exporter/test_exporter.py
 ```
 
-## Java Test Classes (61 JUnit 5 Tests)
+## Java Test Classes (67 JUnit 5 Tests)
 
 | Test Class | Package | Tests | What It Verifies |
 | --- | --- | --- | --- |
@@ -35,6 +35,7 @@ python -m pytest tools/onshape-exporter/test_exporter.py
 | `ObbCollisionDetectorTest` | `yacsim.core.physics` | 4 | `detectsSeparatedBoxes`, `detectsOverlappingRotatedBoxes`, `detectsExtensionEnvelopeViolation`, and `multiObbEliminatesFalsePositiveInsideLShapedCavity`. |
 | `MinimalJsonTest` | `yacsim.core.util` | 1 | `roundTripsNestedJsonCleanly` — Round-trips nested objects, arrays, strings, booleans, nulls, and numbers through `MinimalJson.parse` and `toPrettyJson`. |
 | `YamsMechanismBridgeTest` | `yacsim.core.yams` | 8 | `fromAngleSupplierComputesPivotPoseAndSupportsInversion`, `fromDistanceSupplierComputesLinearPoseAlongAxisAndZeroOffset`, `chainParentChildComposesNestedMechanismTransforms`, `estimatesParallelAxisMomentOfInertiaAndMassFromMeshMetadata`, `fromCascadingElevatorScalesStageHeightsProportionally`, `fromFourBarKeepsEndEffectorLevelAlongArc`, `fromSpinningWheelAndMountedRollerComposeParentAndSpinRotation`, and `fromAngularVelocityIntegratesSpinAngleWithoutNaN`. |
+| `BallisticsAndTelemetryTest` | `yacsim.core.ballistics` | 6 | Analytical vacuum RK4 verification, aerodynamic drag + Magnus backspin lift, 3D OBB target/obstacle hit detection, `yacsim-field.json` manifest loading, `predictArc` non-mutating aim arcs, and `SimTruthPose3d` + `withDataLogEnabled` verification. |
 | `CadManifestLoaderTest` | `yacsim.core.manifest` | 26 | Manifest JSON round-trip, URDF XML & native Onshape `.zip` import, Zip-Slip protection, `GlbMerger`, unified Z-grounding, `CadUrdfOptions` (fastener filtering, subtree baking, `attachLinksToJoint`, `NOSIMPLIFY`), `YacSimDiagnostic`, `YamsCommands3Bridge` (`chainFromManifest`, `attachSwerveModules`), zero-alloc OBB broadphase/SAT, glTF node-transform bounds, and `YacSimYamsFactory` real-robot pass-through. |
 
 ### `yacsim.core.manifest.CadManifestLoaderTest` Breakdown (26 Tests)

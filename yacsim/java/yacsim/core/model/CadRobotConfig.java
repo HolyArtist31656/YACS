@@ -52,6 +52,8 @@ public final class CadRobotConfig {
   private final Set<String> boundComponentKeys = new LinkedHashSet<>();
   private boolean reenableCollisionOnBind = false;
   private Supplier<Pose2d> drivetrainPoseSupplier = () -> new Pose2d();
+  private Supplier<Pose3d> simTruthPoseSupplier = null;
+  private boolean dataLogEnabled = false;
   private String telemetryTable = "YACSim";
   private Path advantageScopeOutputDir = null;
   private BoundingBox3d extensionEnvelope = null;
@@ -116,6 +118,44 @@ public final class CadRobotConfig {
    */
   public CadRobotConfig withDrivetrainPoseSupplier(Supplier<Pose2d> s) {
     this.drivetrainPoseSupplier = Objects.requireNonNull(s);
+    return this;
+  }
+
+  /**
+   * Registers an optional ground-truth 3D simulated field pose supplier (for example from YAMS
+   * 2027's {@code SwerveDrive::getSimPose}) published alongside fused odometry at {@code
+   * /<tableName>/SimTruthPose3d}.
+   *
+   * @param s Ground-truth 3D pose supplier, or {@code null} to disable.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withSimTruthPoseSupplier(Supplier<Pose3d> s) {
+    this.simTruthPoseSupplier = s;
+    return this;
+  }
+
+  /**
+   * Convenience overload registering a 2D ground-truth simulated field pose supplier (such as YAMS
+   * 2027's {@code SwerveDrive::getSimPose}), automatically lifted to {@link Pose3d}.
+   *
+   * @param s Ground-truth 2D pose supplier, or {@code null} to disable.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withSimTruthPose2dSupplier(Supplier<Pose2d> s) {
+    this.simTruthPoseSupplier = s == null ? null : () -> new Pose3d(s.get());
+    return this;
+  }
+
+  /**
+   * Enables or disables direct WPILib {@code DataLog} struct recording ({@code .wpilog}) in {@link
+   * yacsim.core.advantagescope.AdvantageScopePublisher} so 3D poses and collisions continue
+   * recording even when NT4 is turned off in competition.
+   *
+   * @param enabled {@code true} to append struct entries directly to {@code DataLogManager.getLog()}.
+   * @return This config for chaining.
+   */
+  public CadRobotConfig withDataLogEnabled(boolean enabled) {
+    this.dataLogEnabled = enabled;
     return this;
   }
 
@@ -889,6 +929,16 @@ public final class CadRobotConfig {
   /** @return Robot 2D field pose supplier. */
   public Supplier<Pose2d> getDrivetrainPoseSupplier() {
     return drivetrainPoseSupplier;
+  }
+
+  /** @return Optional ground-truth 3D simulation pose supplier. */
+  public Optional<Supplier<Pose3d>> getSimTruthPoseSupplier() {
+    return Optional.ofNullable(simTruthPoseSupplier);
+  }
+
+  /** @return {@code true} if direct WPILib {@code DataLog} struct recording is enabled. */
+  public boolean isDataLogEnabled() {
+    return dataLogEnabled;
   }
 
   /** @return Root NetworkTables table name. */

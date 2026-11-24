@@ -1,0 +1,41 @@
+{
+    "fileName": "yacsim_commands3.json",
+    "name": "Yet Another CAD Simulator (Commands v3)",
+    "version": "2027.3.0-alpha1",
+    "wpilibYear": "2027_alpha7",
+    "uuid": "9f6b4e1a-2c7d-4e8a-9b31-7a5c8d2027c3",
+    "mavenUrls": [
+        "https://holyartist31656.github.io/YACS/maven/releases/"
+    ],
+    "jsonUrl": "https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json",
+    "javaDependencies": [
+        {
+            "groupId": "yacsim",
+            "artifactId": "YACSim-core",
+            "version": "2027.3.0-alpha1"
+        },
+        {
+            "groupId": "yacsim",
+            "artifactId": "YACSim-commands3",
+            "version": "2027.3.0-alpha1"
+        }
+    ],
+    "jniDependencies": [
+        
+    ],
+    "cppDependencies": [
+        
+    ],
+    "requires": [
+        {
+            "uuid": "4decdc05-a056-46cf-9561-39449bbb0130",
+            "errorMessage": "YACSim requires WPILib Commands v3 (CommandsV3.json).",
+            "offlineFileName": "CommandsV3.json"
+        },
+        {
+            "uuid": "a1051e86-a979-4880-a28b-a0d5362d1d97",
+            "errorMessage": "YACSim requires YAMS for Commands v3 (yams_commands3.json).",
+            "offlineFileName": "yams_commands3.json"
+        }
+    ]
+}

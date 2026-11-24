@@ -39,6 +39,7 @@ public final class CadRobotSimulator implements AutoCloseable {
   private record SimSnapshot(
       Pose2d robotPose2d,
       Pose3d robotPose3d,
+      Pose3d simTruthPose3d,
       Pose3d[] componentPoses,
       List<CollisionEvent> collisions,
       Map<String, Double> rollerRadPerSec) {}
@@ -91,8 +92,10 @@ public final class CadRobotSimulator implements AutoCloseable {
       Pose3d p = allComponents.get(i).getPoseSupplier().get();
       initialPoses[i] = p != null ? p : IDENTITY_POSE;
     }
+    Pose3d initialTruth = config.getSimTruthPoseSupplier().map(s -> s.get()).orElse(null);
     this.latestSnapshot =
-        new SimSnapshot(new Pose2d(), IDENTITY_POSE, initialPoses, List.of(), Map.of());
+        new SimSnapshot(
+            new Pose2d(), IDENTITY_POSE, initialTruth, initialPoses, List.of(), Map.of());
 
     if (config.isCollisionCheckingEnabled() && config.isIgnoreRestingOverlapsEnabled()) {
       calibrateRestingOverlaps(initialPoses);
@@ -111,7 +114,11 @@ public final class CadRobotSimulator implements AutoCloseable {
     }
     if (enableNetworkTables) {
       this.publisher =
-          new AdvantageScopePublisher(config.getTelemetryTable(), config.getRollerTelemetries());
+          new AdvantageScopePublisher(
+              config.getTelemetryTable(),
+              config.getRollerTelemetries(),
+              config.isDataLogEnabled(),
+              config.getSimTruthPoseSupplier().isPresent());
     }
   }
 
@@ -184,10 +191,12 @@ public final class CadRobotSimulator implements AutoCloseable {
       AngularVelocity v = roller.angularVelocitySupplier().get();
       rollerSpeeds.put(roller.name(), v != null ? v.in(RadiansPerSecond) : 0.0);
     }
+    Pose3d simTruthPose3d = config.getSimTruthPoseSupplier().map(s -> s.get()).orElse(null);
     this.latestSnapshot =
         new SimSnapshot(
             robotPose2d,
             robotPose3d,
+            simTruthPose3d,
             poses,
             List.copyOf(collisions),
             Collections.unmodifiableMap(rollerSpeeds));
@@ -200,6 +209,7 @@ public final class CadRobotSimulator implements AutoCloseable {
       publisher.publish(
           snap.robotPose2d(),
           snap.robotPose3d(),
+          snap.simTruthPose3d(),
           snap.componentPoses(),
           snap.collisions(),
           snap.rollerRadPerSec());
@@ -352,6 +362,11 @@ public final class CadRobotSimulator implements AutoCloseable {
   /** @return Latest sampled 3D field pose. */
   public Pose3d getLatestRobotPose3d() {
     return latestSnapshot.robotPose3d();
+  }
+
+  /** @return Latest sampled ground-truth 3D simulation pose, if configured. */
+  public Optional<Pose3d> getLatestSimTruthPose3d() {
+    return Optional.ofNullable(latestSnapshot.simTruthPose3d());
   }
 
   /** @return Defensive copy of the latest articulated component poses. */

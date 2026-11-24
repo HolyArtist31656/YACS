@@ -1,0 +1,99 @@
+{
+  "schemaVersion": "1.0",
+  "seasonName": "REBUILT_2026_Demo",
+  "fieldType": "ANDYMARK",
+  "fieldLengthMeters": 16.513048,
+  "fieldWidthMeters": 8.042656,
+  "staticObstacles": [
+    {
+      "id": "OBSTACLE_blue_hub_base",
+      "polygonMeters": [
+        [
+          4.1,
+          3.6
+        ],
+        [
+          5.1,
+          3.6
+        ],
+        [
+          5.1,
+          4.6
+        ],
+        [
+          4.1,
+          4.6
+        ]
+      ],
+      "minZMeters": 0.0,
+      "maxZMeters": 1.15
+    }
+  ],
+  "noEntryZones": [
+    {
+      "id": "NO_ENTRY_opponent_zone",
+      "polygonMeters": [
+        [
+          14.0,
+          0.0
+        ],
+        [
+          16.5,
+          0.0
+        ],
+        [
+          16.5,
+          3.0
+        ],
+        [
+          14.0,
+          3.0
+        ]
+      ]
+    }
+  ],
+  "trenchZones": [
+    {
+      "id": "TRENCH_overhead_bar",
+      "clearanceHeightMeters": 0.7,
+      "polygonMeters": [
+        [
+          7.5,
+          0.0
+        ],
+        [
+          8.5,
+          0.0
+        ],
+        [
+          8.5,
+          1.5
+        ],
+        [
+          7.5,
+          1.5
+        ]
+      ]
+    }
+  ],
+  "scoringSites": [
+    {
+      "id": "SCORING_SITE_blue_hub_opening",
+      "targetMeters": [
+        4.6,
+        4.1,
+        2.2
+      ],
+      "boundsMinMeters": [
+        4.15,
+        3.65,
+        1.85
+      ],
+      "boundsMaxMeters": [
+        5.05,
+        4.55,
+        2.55
+      ]
+    }
+  ]
+}

@@ -216,3 +216,15 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `poseSupplierFromManifest(CadRobotManifest, String, Arm\|Elevator\|Pivot)` | `YamsCommands3Bridge` | Returns the manifest-derived `Supplier<Pose3d>` for composition or custom inspection. |
 | `getComponentPoseSupplier(String)` | `CadRobotConfig` | Returns `Optional<Supplier<Pose3d>>` for automatic parent-mounted roller chaining in `YamsCommands3Bridge.bindFromManifest`. |
 | `normalizeName(String)` | `CadRobotManifest` | Canonicalizes CAD/Java names (strips `yacsim_` prefix, spaces, hyphens, underscores, lowercases) for forgiving link/joint/component lookup. |
+
+---
+
+## `yacsim.core.ballistics` (`v2027.5.0-alpha1`)
+
+| Class / Method | Purpose |
+| :--- | :--- |
+| `ProjectileSpec` | Immutable physical game-piece record (`frcFuel2026()`, `frcNote2024()`, `frcCoral2025()`, `vacuum(...)`). |
+| `FieldObstacle3d` | Immutable 3D field obstacle or scoring target OBB (`axisAlignedObstacle`, `axisAlignedTarget`, `loadFieldManifest(Path)`). |
+| `ProjectileState` | Immutable airborne projectile snapshot with `toPose3d()` velocity-aligned orientation. |
+| `ProjectilePhysicsSim` | Pure-Java RK4 integrator (gravity, quadratic drag, Magnus spin lift, floor bounce, 3D OBB target/obstacle collisions, `launch`, `step`, `predictArc`, `getActiveProjectilePoses`, `getScoredCount`). |
+| `TrajectoryArcPublisher` | Publishes `/YACSim/Ballistics/PredictedArc` and `ActiveProjectiles` (`Pose3d[]`) to NT4 and optional WPILib `DataLog`. |

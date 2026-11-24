@@ -8,6 +8,14 @@
 - **Automatic Moving-Subtree Baking, `attachLinksToJoint` & Selective `NOSIMPLIFY` (`YACS-AUDIT-04`)**: Added `CadUrdfOptions.bakeUnboundLinksIntoChassis(true)` (automatically baking unbound children into their nearest kept moving parent's `.glb` or into `root.glb`), `attachLinksToJoint(joint, patterns...)` (re-parenting mis-mated `root`-attached parts into moving mechanism `.glb`s in Java), and `noSimplifyMeshPatterns(...)`.
 - **True Resting Initial Poses (`YACS-AUDIT-05`)**: `CadRobotSimulator` initializes its snapshot from true URDF resting poses before the first `simIterate()`.
 - **Roller Collision Preservation & Fuzzy Alias Hints (`YACS-AUDIT-08`)**: Bound `CONTINUOUS` rollers keep collision disabled when `disableUnboundCollisions(true)` is set, and `YacSimDiagnostic.suggestBestJointMatch(...)` suggests likely CAD aliases for unmatched Java names, and `YacSimDiagnostic.formatReport(...)` prints spatial `@ (x, y, z)m` coordinates for each movable joint.
+## [2027.5.0-alpha1] — Dual-Pose Ground Truth, Direct DataLog, 3D RK4 Ballistics & Field Exporter
+
+### Added (67 JUnit 5 + 10 Python Automated Tests)
+- **Dual-Pose Ground Truth (`YACS-AUDIT-06`)**: Added `CadRobotConfig.withSimTruthPoseSupplier` / `withSimTruthPose2dSupplier`, `CadRobotSimulator.getLatestSimTruthPose3d()`, `/YACSim/SimTruthPose3d` publishing in `AdvantageScopePublisher`, and `YamsCommands3Bridge.attachSwerveModulesWithTruth(...)` wiring YAMS 2027's `SwerveDrive::getSimPose` alongside noisy fused odometry (`drive::getPose`).
+- **Direct WPILib `DataLog` Struct Recording (`YACS-AUDIT-07`)**: Added `CadRobotConfig.withDataLogEnabled(boolean)` so `AdvantageScopePublisher` appends `StructLogEntry` / `StructArrayLogEntry` directly to `DataLogManager.getLog()` (`.wpilog`), preserving AdvantageScope 3D logs even when NT4 is turned off in competition.
+- **3D RK4 Projectile Ballistics (`yacsim.core.ballistics`)**: Added zero-dependency `ProjectileSpec` (with `frcFuel2026()`, `frcNote2024()`, `frcCoral2025()`, and `vacuum()` presets), `FieldObstacle3d` (with `loadFieldManifest(Path)`), `ProjectileState`, `ProjectilePhysicsSim` (4th-order Runge-Kutta gravity + quadratic drag + Magnus spin lift + floor bounce + 3D OBB obstacle/target collisions + `predictArc(...)`), and `TrajectoryArcPublisher` (`/YACSim/Ballistics/PredictedArc` & `ActiveProjectiles` as `Pose3d[]`).
+- **Onshape / CAD Field Exporter (`tools/onshape-field-exporter/`)**: Pure-Python CLI generating YAECE `SeasonConfig` JSON (Andymark & Welded variants), PathPlanner `navgrid.json`, and YACSim 3D field OBB manifests (`yacsim-field.json`) from a single CAD field spec.
+
 ## [2027.4.0-alpha1] — Phase 3 Step 2: Code-Side Fastener Filtering, Joint Aliasing, Diagnostic Auto-Binder & Swerve Overlay
 
 ### Added
