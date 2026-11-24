@@ -5,6 +5,8 @@
 [![Java 25](https://img.shields.io/badge/Java-25-orange)](https://adoptium.net/)
 [![License: LGPL-3.0](https://img.shields.io/badge/License-LGPL--3.0-green.svg)](LICENSE.txt)
 
+![YACSim End-to-End Architecture Pipeline](docs/images/yacsim-architecture-pipeline.jpg)
+
 **YACSim** is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** built to pair seamlessly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
 
 ## Online Installation (WPILib 2027 VS Code)
@@ -62,7 +64,7 @@ Call `cadSim.periodic()` from `robotPeriodic()` and `cadSim.simulationPeriodic()
 
 | Guide | Description |
 | --- | --- |
-| [Getting Started](docs/GETTING_STARTED.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
+| [Getting Started](docs/GETTING_STARTED.md) · [Implementation Walkthrough](docs/IMPLEMENTATION_WALKTHROUGH.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
 | [Guides](docs/GUIDES.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and the FRC 6328 Darwin walkthrough |
 | [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
 | [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 8 JUnit 5 test classes (42 tests) and how to run them |

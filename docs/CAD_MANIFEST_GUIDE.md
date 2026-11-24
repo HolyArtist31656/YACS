@@ -1,12 +1,14 @@
 # CAD Manifest & URDF Automation Guide (`yacsim-robot.json`)
 
-YACSim `v2027.1.0-alpha1` introduces **Phase 1 CAD-to-YACSim Automation** (`yacsim.core.manifest`), giving FRC teams a choice between three fully interoperable workflows:
+YACSim `v2027.2.1-alpha1` introduces **Phase 1 CAD-to-YACSim Automation** (`yacsim.core.manifest`), giving FRC teams a choice between three fully interoperable workflows:
 
 1. **Manual Java Configuration** — Hand-configure `CadRobotConfig`, `CadAssetConfig`, pivots, limits, and `YamsCommands3Bridge` (all existing APIs remain 100% unchanged).
 2. **Manifest-Driven (`yacsim-robot.json`)** — Feed all CAD-extractable geometry, exact mass/inertia tensors, joint pivots, axes, hard/soft limits, arm lengths, drum/wheel radii, and cameras from a single `yacsim-robot.json` file into both **YACSim** and **YAMS 2027**. Keep only electrical & control values (CAN IDs, `DCMotor`, gear ratios, PID/FF gains) in Java.
 3. **URDF XML Import (`.urdf`) & Hybrid** — Import standard URDF files exported by [`onshape-to-robot`](https://pypi.org/project/onshape-to-robot/0.1.1/), Fusion 360 URDF exporters, or SolidWorks `sw_urdf_exporter` directly via `CadRobotConfig.fromUrdf(Path)`, or convert a URDF to `yacsim-robot.json` via `CadManifestLoader.writeJson(...)` and override any individual setting in Java.
 
 > **Prerequisites for Automated CAD Fetching**: Running a `yacsim-robot.json` manifest inside your WPILib robot project requires **Java 25 only** (zero Python on the robot). If you want to **automatically fetch and generate** `yacsim-robot.json` + `.glb` meshes from Onshape using `tools/onshape-exporter/`, you will need **Python 3.10+** and an **Onshape API key pair** on your development laptop—see the step-by-step [Onshape Exporter & API Key Setup Guide](ONSHAPE_EXPORTER_GUIDE.md).
+
+![YACSim End-to-End Architecture Pipeline](images/yacsim-architecture-pipeline.jpg)
 
 ---
 

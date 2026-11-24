@@ -1,6 +1,6 @@
 # Onshape-to-YACSim Automated Exporter Guide (Phase 2)
 
-YACSim `v2027.2.0-alpha1` includes **`tools/onshape-exporter/`**, a zero-dependency Python 3 CLI (standard library only — **no `pip install` needed**) that connects directly to Onshape's REST API v6 ([Import & Export API](https://onshape-public.github.io/docs/api-adv/translation/), [Onshape API Changelog](https://onshape-public.github.io/docs/changelog/)) to extract:
+YACSim `v2027.2.1-alpha1` includes **`tools/onshape-exporter/`**, a zero-dependency Python 3 CLI (standard library only — **no `pip install` needed**) that connects directly to Onshape's REST API v6 ([Import & Export API](https://onshape-public.github.io/docs/api-adv/translation/), [Onshape API Changelog](https://onshape-public.github.io/docs/changelog/)) to extract:
 
 - Assembly link hierarchy, 4x4 occurrence transforms, and mate graph (`REVOLUTE`, `CYLINDRICAL`, `SLIDER`)
 - Exact AdvantageScope `zeroedPosition` and `zeroedRotations` solved automatically via $T_{\text{zero}} = T_{\text{robot}\to\text{joint}}^{-1} \cdot T_{\text{robot}\to\text{link}}$
@@ -121,6 +121,8 @@ python tools/onshape-exporter/yacsim_onshape_exporter.py `
 When a roller's `parentLink` in `yacsim-robot.json` is a moving mechanism (like `IntakeRoller` mounted on `Slamtake`), `YamsCommands3Bridge.bindFromManifest(robotConfig, "IntakeRoller", slamtake.getRollerMotor())` automatically looks up `Slamtake`'s live `Pose3d` supplier via `CadRobotConfig.getComponentPoseSupplier("Slamtake")` and composes the parent arm's motion with the roller's local spin—zero extra Java code required.
 
 ---
+
+![WPILib NWU Coordinate Frame and SE(3) Anchor Transform](images/se3-anchor-coordinate-frame.jpg)
 
 ## 6. Automatic 4x4 Anchor Point & Floor Grounding Math (`se3_math.py`)
 

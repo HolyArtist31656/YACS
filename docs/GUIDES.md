@@ -277,3 +277,4 @@ Want CAD to feed your mesh paths, AdvantageScope zeroing, exact mass/inertia ten
 - Compare the manual [`darwin_6328_2027`](../examples/commands3/darwin_6328_2027/) example against the manifest-driven [`darwin_6328_manifest_2027`](../examples/commands3/darwin_6328_manifest_2027/README.md) example.
 
 - **CAD-to-Code Naming Conventions**: See [CAD_CODE_NAMING_CONVENTIONS.md](CAD_CODE_NAMING_CONVENTIONS.md) for aligning Onshape subassemblies and mates with your Java mechanisms.
+- **Step-by-Step Implementation Walkthrough**: See [IMPLEMENTATION_WALKTHROUGH.md](IMPLEMENTATION_WALKTHROUGH.md) for a complete visual guide from blank project to AdvantageScope.

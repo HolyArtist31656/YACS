@@ -2,6 +2,8 @@
 
 When CAD and Programming agree on a single shared naming contract up front, `tools/onshape-exporter/yacsim_onshape_exporter.py` and YACSim's `CadRobotConfig.fromManifest(...)` connect your Onshape assembly directly to your Java mechanisms with **zero manual coordinate copying**.
 
+![Single Shared Mechanism Name Contract](images/cad-to-code-naming-contract.jpg)
+
 ---
 
 ## 1. The Single Shared Mechanism Name Rule

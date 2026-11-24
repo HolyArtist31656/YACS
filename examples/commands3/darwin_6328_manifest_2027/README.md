@@ -12,7 +12,7 @@ This example demonstrates **Phase 1 CAD-to-YACSim automation** using FRC Team 63
 ## Quick Start (Windows PowerShell)
 
 ```powershell
-# 1. Publish YACSim v2027.2.0-alpha1 locally from YACS/vendordep
+# 1. Publish YACSim v2027.2.1-alpha1 locally from YACS/vendordep
 cd ..\..\..\vendordep
 .\gradlew publish generateVendordepJson "-Dorg.gradle.java.home=C:\Users\Public\wpilib\2027_alpha7\jdk"
 
