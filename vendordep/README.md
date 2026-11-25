@@ -18,4 +18,4 @@ Open **this `vendordep/` directory** in **WPILib 2027 VS Code** to build, test, 
 - **Maven Repository**: `https://holyartist31656.github.io/YACS/maven/releases/`
 - **Hosted Javadoc**: `https://holyartist31656.github.io/YACS/javadoc/`
 
-**Current Release:** `v2027.5.0-alpha1` (67 JUnit 5 tests across 9 test classes).
+**Current Release:** `v2027.6.5-alpha1` (67 JUnit 5 tests across 9 test classes).

@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Yet Another Software Suite / YACSim Contributors
+// SPDX-License-Identifier: LGPL-3.0-or-later
+
 /**
  * Pure-Java 4th-order Runge-Kutta (RK4) 3D projectile ballistics, aerodynamic drag, Magnus spin
  * lift, 3D OBB field obstacle/target collisions, and AdvantageScope {@code Pose3d[]} trajectory

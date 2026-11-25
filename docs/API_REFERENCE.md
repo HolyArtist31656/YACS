@@ -35,7 +35,7 @@ Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pos
 | `static List<Supplier<Pose3d>> fromCascadingElevator(Elevator elevator, int stageCount, Translation3d base, MotionAxis axis)` | Builds proportional per-stage `Pose3d` suppliers (`1/N .. N/N`). |
 | `static Supplier<Pose3d> fromFourBar(Arm arm, Translation3d pivot, double armLengthMeters, MotionAxis axis [, boolean inverted])` | Keeps a 4-bar end-effector level while following the arm's circular arc. |
 | `static CadDrivetrainConfig fromYamsSwerve(SwerveDrive drive, ...)` | Binds `drive::getPose`, `drive::getGyroRotation3d`, and `drive::getModulePositions` directly. |
-| `static CadRobotConfig attachSwerveModulesWithTruth(CadRobotConfig config, SwerveDrive drive, ...)` | (`v2027.5.0-alpha1`) Attaches 4 animated swerve modules AND binds `drive::getSimPose` to `/YACSim/SimTruthPose3d`. |
+| `static CadRobotConfig attachSwerveModulesWithTruth(CadRobotConfig config, SwerveDrive drive, ...)` | (`v2027.6.5-alpha1`) Attaches 4 animated swerve modules AND binds `drive::getSimPose` to `/YACSim/SimTruthPose3d`. |
 | `static Supplier<Pose3d> fromYamsFlyWheel(FlyWheel flywheel, Transform3d mountOffset)` | Wraps YAMS `FlyWheel.getPose3d()` with a CAD mounting offset. |
 | `static Supplier<Pose3d> fromYamsRollerMotor(SmartMotorController motor, Translation3d axle, MotionAxis axis [, boolean inverted])` | Spins a roller/wheel `.glb` directly from `motor.getMechanismPosition()`. |
 | `static Supplier<Pose3d> fromMountedYamsRoller(Supplier<Pose3d> parentPose, SmartMotorController motor, Translation3d localAxle, MotionAxis axis, boolean inverted)` | Mounts a spinning roller bar onto a moving parent mechanism. |
@@ -88,9 +88,9 @@ Fluent builder defining a simulated robot's chassis, articulated components, col
 | `withChassisAsset(CadAssetConfig asset)` | Sets chassis CAD asset directly (when not using `CadDrivetrainConfig`). |
 | `addComponent(CadComponentConfig comp)` | Adds an articulated mechanism component in AdvantageScope `model_N` order. |
 | `withDrivetrainPoseSupplier(Supplier<Pose2d> s)` | Default: `Pose2d::new`. |
-| `withSimTruthPoseSupplier(Supplier<Pose3d> s)` | Optional (`v2027.5.0-alpha1`); publishes ground-truth 3D pose to `/<tableName>/SimTruthPose3d` alongside fused odometry. |
-| `withSimTruthPose2dSupplier(Supplier<Pose2d> s)` | Optional (`v2027.5.0-alpha1`); wraps a 2D ground-truth supplier (e.g., YAMS `SwerveDrive::getSimPose`) as `/<tableName>/SimTruthPose3d`. |
-| `withDataLogEnabled(boolean enabled)` | Default: `false` (`v2027.5.0-alpha1`); writes `Pose3d`, `Pose3d[]`, and collision flags directly to WPILib `DataLogManager` (`.wpilog`) even when NT4 is off. |
+| `withSimTruthPoseSupplier(Supplier<Pose3d> s)` | Optional (`v2027.6.5-alpha1`); publishes ground-truth 3D pose to `/<tableName>/SimTruthPose3d` alongside fused odometry. |
+| `withSimTruthPose2dSupplier(Supplier<Pose2d> s)` | Optional (`v2027.6.5-alpha1`); wraps a 2D ground-truth supplier (e.g., YAMS `SwerveDrive::getSimPose`) as `/<tableName>/SimTruthPose3d`. |
+| `withDataLogEnabled(boolean enabled)` | Default: `false` (`v2027.6.5-alpha1`); writes `Pose3d`, `Pose3d[]`, and collision flags directly to WPILib `DataLogManager` (`.wpilog`) even when NT4 is off. |
 | `withTelemetryTable(String table)` | Default: `"YACSim"`. |
 | `withAdvantageScopeExportDir(Path dir)` | Optional; exports `Robot_<robotName>` bundle on simulator startup. |
 | `withAutoInstallToAdvantageScope()` / `withAutoInstallToAdvantageScope(boolean)` | Default: `false`; installs `Robot_<robotName>` directly into the OS AdvantageScope `userAssets` directory. |
@@ -223,7 +223,7 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 
 ---
 
-## `yacsim.core.ballistics` (`v2027.5.0-alpha1`)
+## `yacsim.core.ballistics` (`v2027.6.5-alpha1`)
 
 | Class / Method | Purpose |
 | :--- | :--- |
@@ -232,3 +232,17 @@ Configuration for a single CAD file (`.glb`, `.gltf`, `.obj`, `.stl`).
 | `ProjectileState` | Immutable airborne projectile snapshot with `toPose3d()` velocity-aligned orientation. |
 | `ProjectilePhysicsSim` | Pure-Java RK4 integrator (gravity, quadratic drag, Magnus spin lift, floor bounce, 3D OBB target/obstacle collisions, `launch`, `step`, `predictArc`, `getActiveProjectilePoses`, `getScoredCount`). |
 | `TrajectoryArcPublisher` | Publishes `/YACSim/Ballistics/PredictedArc` and `ActiveProjectiles` (`Pose3d[]`) to NT4 and optional WPILib `DataLog`. |
+
+## `yacsim.core.sensors` (`v2027.6.0`–`v2027.6.5-alpha1`)
+
+Non-camera 3D environment and chassis physics simulation models (camera and AprilTag simulation is handled by **YALL** `yall.sim.VisionSim`):
+
+- **`SensorFaultConfig`**: Immutable record holding deterministic RNG seed, QuestNav VIO latency/drift bounds, 3D LiDAR scan cadence/noise/self-mask/max-range, and carpet friction (`mu`) + robot mass (`kg`), with finite validation and `.ideal()`, `.realistic2027()`, and `.stressFaults()` presets.
+- **`QuestNavSim`**: 120 Hz wired USB-C Ethernet VIO simulator with bounded random-walk drift, transport latency, `injectTrackingLoss(...)`, and `resetPose(...)`.
+- **`Lidar3dSim`**: 360-degree 3D LiDAR cluster simulator with cadence throttling, chassis self-masking, Gaussian range noise, and static `FieldObstacle3d` OBB occlusion.
+- **`FrictionCircleSlipModel`**: Clamps swerve chassis acceleration to `mu * g` so wheel odometry decouples realistically from `SimTruthPose3d` during skids.
+
+## `yacsim.core.ballistics` Additions (`v2027.6.5-alpha1`)
+
+- **`AerodynamicCorrectionConfig`**: Enables buoyancy, sphere added mass (`Cm = 0.5`), exponential spin decay, and `0.001 s` RK4 sub-stepping on `ProjectilePhysicsSim.withAerodynamicCorrections(...)`.
+- **`BallisticCalibrationFitter`**: Two-observable (landing range + entry angle) aerodynamic coefficient fitter with deterministic 25% holdout validation.

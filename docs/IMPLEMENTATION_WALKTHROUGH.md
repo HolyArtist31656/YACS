@@ -23,7 +23,7 @@ All four workflows can be mixed freely (for example, loading a manifest and over
 
 1. Open your WPILib `2027_alpha7` Java 25 project in VS Code.
 2. Install **WPILib Commands v3** (`CommandsV3.json`) and **YAMS for Commands v3** (`yams_commands3.json` from `https://cdn.yassrobotics.com/`).
-3. Install **YACSim (`v2027.3.0-alpha1`)** via **WPILib: Manage Vendor Libraries -> Install new libraries (online)** using:
+3. Install **YACSim (`v2027.6.5-alpha1`)** via **WPILib: Manage Vendor Libraries -> Install new libraries (online)** using:
    ```text
    https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
    ```

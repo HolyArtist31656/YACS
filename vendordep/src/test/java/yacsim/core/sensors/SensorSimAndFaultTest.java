@@ -1,16 +1,17 @@
-// Copyright (c) Yet Another Software Suite / YACSim Contributors
-// Open Source Software; you can modify and/or share it under the terms of
-// the GNU Lesser General Public License v3.0 (LGPL-3.0) in the root directory.
+// Copyright (c) 2026 Yet Another Software Suite / YACSim Contributors
+// SPDX-License-Identifier: LGPL-3.0-or-later
 
 package yacsim.core.sensors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.SplittableRandom;
 import org.junit.jupiter.api.Test;
 import org.wpilib.math.geometry.Pose2d;
 import org.wpilib.math.geometry.Pose3d;
@@ -26,53 +27,23 @@ import yacsim.core.physics.BoundingBox3d;
 class SensorSimAndFaultTest {
 
   @Test
-  void visionLatencyRingBufferDeliversDelayedFramesWithDynamicStdDev() {
-    SensorFaultConfig cfg = SensorFaultConfig.realistic2027();
-    NoisyVisionSim vision = new NoisyVisionSim(cfg);
-    Pose3d truth = new Pose3d(3.2, 4.1, 0.0, new Rotation3d(0.0, 0.0, 0.5));
-
-    // At t=0.0s, frame is captured into ring buffer (35 +/- 5 ms latency) -> not delivered yet
-    List<NoisyVisionSim.VisionMeasurement> atZero = vision.step(0.0, truth, 3, 2.5);
-    assertTrue(atZero.isEmpty(), "Delayed vision frame must not arrive instantaneously");
-    assertEquals(1, vision.getPendingFrameCount());
-
-    // Advance past 60 ms -> delayed frame(s) must arrive with distance-squared dynamic std-dev
-    List<NoisyVisionSim.VisionMeasurement> received = new java.util.ArrayList<>();
-    for (int tick = 1; tick <= 5; tick++) {
-      received.addAll(vision.step(tick * 0.02, truth, 3, 2.5));
-    }
-    assertFalse(received.isEmpty(), "Delayed vision frames should drain from ring buffer");
-    NoisyVisionSim.VisionMeasurement first = received.get(0);
-    double expectedStd = cfg.visionBaseStdDevMeters() * (2.5 * 2.5) / 3.0;
-    assertEquals(expectedStd, first.xyStdDevMeters(), 1e-6);
-    assertTrue(first.captureTimestampSec() < 0.08);
-  }
-
-  @Test
-  void visionBlackoutInjectsOver250MsDropoutAndRecoversCleanly() {
-    SensorFaultConfig cfg =
-        new SensorFaultConfig(
-            42L, 0.02, 0.0, 0.04, 0.013, 0.0, 0.005, 0.01, 0.3, 5.55, 0.02, 0.48, 16.0, 1.15, 61.0);
-    NoisyVisionSim vision = new NoisyVisionSim(cfg);
-    Pose3d truth = new Pose3d(4.0, 4.0, 0.0, new Rotation3d());
-
-    // Inject a 300 ms blackout starting at t=0.10s
-    vision.injectBlackout(0.10, 0.30);
-
-    int framesDuringBlackout = 0;
-    for (int tick = 7; tick <= 19; tick++) {
-      // t = 0.14s .. 0.38s (after 20ms pipeline drain, all frames must be suppressed)
-      framesDuringBlackout += vision.step(tick * 0.02, truth, 2, 2.0).size();
-    }
-    assertEquals(
-        0, framesDuringBlackout, "Zero vision frames should arrive during >250 ms blackout");
-
-    // After t=0.40s, frames must recover cleanly
-    int recovered = 0;
-    for (int tick = 20; tick <= 25; tick++) {
-      recovered += vision.step(tick * 0.02, truth, 2, 2.0).size();
-    }
-    assertTrue(recovered > 0, "Vision should recover cleanly after blackout expires");
+  void invalidSensorFaultConfigThrowsIllegalArgumentException() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new SensorFaultConfig(1L, -0.01, 0.01, 0.3, 5.55, 0.02, 0.48, 16.0, 1.15, 61.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new SensorFaultConfig(1L, 0.007, Double.NaN, 0.3, 5.55, 0.02, 0.48, 16.0, 1.15, 61.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new SensorFaultConfig(1L, 0.007, 0.01, 0.3, 0.0, 0.02, 0.48, 16.0, 1.15, 61.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new SensorFaultConfig(1L, 0.007, 0.01, 0.3, 5.55, 0.02, 1.0, 0.5, 1.15, 61.0));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new SensorFaultConfig(1L, 0.007, 0.01, 0.3, 5.55, 0.02, 0.48, 16.0, 0.0, 61.0));
   }
 
   @Test
@@ -158,7 +129,7 @@ class SensorSimAndFaultTest {
   }
 
   @Test
-  void allianceMirroringRotationalVsReflectionPreservesBoundsAndHandlesFieldJitter() {
+  void allianceMirroringRotationalVsReflectionPreservesBounds() {
     double fieldLen = 16.54;
     double fieldWid = 8.07;
     Pose2d blue = new Pose2d(2.40, 4.04, Rotation2d.fromDegrees(30.0));
@@ -178,10 +149,6 @@ class SensorSimAndFaultTest {
     assertEquals(fieldLen, blue.getX() + redRot.getX(), 1e-9);
     assertEquals(fieldWid, blue.getY() + redRot.getY(), 1e-9);
     assertNotEquals(redRot.getRotation().getDegrees(), redRefl.getRotation().getDegrees());
-
-    // ±13 mm Welded vs. AndyMark AprilTag jitter stays strictly bounded
-    SensorFaultConfig cfg = SensorFaultConfig.realistic2027();
-    assertEquals(0.013, cfg.visionFieldJitterMeters(), 1e-9);
   }
 
   @Test
@@ -236,17 +203,44 @@ class SensorSimAndFaultTest {
     SensorFaultConfig cfg = SensorFaultConfig.realistic2027();
     QuestNavSim q1 = new QuestNavSim(cfg);
     QuestNavSim q2 = new QuestNavSim(cfg);
-    NoisyVisionSim v1 = new NoisyVisionSim(cfg);
-    NoisyVisionSim v2 = new NoisyVisionSim(cfg);
+    Lidar3dSim l1 = new Lidar3dSim(cfg, List.of());
+    Lidar3dSim l2 = new Lidar3dSim(cfg, List.of());
+    List<Translation3d> targets = List.of(new Translation3d(5.0, 4.0, 0.5));
 
     for (int tick = 0; tick < 50; tick++) {
       double t = tick * 0.02;
       Pose3d truth = new Pose3d(1.5 + 0.04 * tick, 4.0, 0.0, new Rotation3d());
       assertEquals(q1.step(t, truth), q2.step(t, truth), "QuestNavSim must be bit-exact per seed");
       assertEquals(
-          v1.step(t, truth, 2, 2.8),
-          v2.step(t, truth, 2, 2.8),
-          "NoisyVisionSim must be bit-exact per seed");
+          l1.scan(t, truth, targets),
+          l2.scan(t, truth, targets),
+          "Lidar3dSim must be bit-exact per seed");
+    }
+  }
+
+  @Test
+  void seededPropertyFuzzFrictionCircleAlwaysRespectsTractionLimitAndFiniteState() {
+    SplittableRandom rng = new SplittableRandom(20271125L);
+    SensorFaultConfig cfg = SensorFaultConfig.realistic2027();
+    double maxAccel = cfg.frictionCoefficientMu() * 9.80665;
+    FrictionCircleSlipModel slip = new FrictionCircleSlipModel(cfg, new Pose2d());
+
+    double prevVx = 0.0;
+    double prevVy = 0.0;
+    for (int i = 0; i < 1_000; i++) {
+      double vxCmd = rng.nextDouble(-6.0, 6.0);
+      double vyCmd = rng.nextDouble(-6.0, 6.0);
+      double omegaCmd = rng.nextDouble(-8.0, 8.0);
+      FrictionCircleSlipModel.SlipStepResult res = slip.step(0.02, vxCmd, vyCmd, omegaCmd);
+      double actualAccel = Math.hypot(res.truthVxMps() - prevVx, res.truthVyMps() - prevVy) / 0.02;
+      assertTrue(
+          actualAccel <= maxAccel + 1e-6,
+          "Friction-circle acceleration exceeded mu*g: " + actualAccel);
+      assertTrue(Double.isFinite(res.truthPose2d().getX()));
+      assertTrue(Double.isFinite(res.truthPose2d().getY()));
+      assertTrue(Double.isFinite(res.skidRatio()) && res.skidRatio() >= 1.0 - 1e-9);
+      prevVx = res.truthVxMps();
+      prevVy = res.truthVyMps();
     }
   }
 }

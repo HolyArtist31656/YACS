@@ -1,5 +1,15 @@
 # Changelog
 
+### YASS/YALL Alignment, High-Fidelity Ballistics & Full-Match Soak (`v2027.6.5-alpha1` — 85 JUnit 5 + 10 Python Tests)
+- **Strict YALL Separation (Clean Break)**: Removed `yacsim.core.sensors.NoisyVisionSim` and the 5 `vision*` fields from `SensorFaultConfig` (camera and AprilTag simulation is now owned by YALL `yall.sim.VisionSim` + `CameraModel`).
+- **High-Fidelity RK4 Aerodynamics (`yacsim.core.ballistics`)**: Added `AerodynamicCorrectionConfig` (buoyancy, sphere added mass `Cm = 0.5`, exponential spin decay, `0.001 s` RK4 sub-stepping) and `BallisticCalibrationFitter` (two-observable range + entry-angle fitting with 25% holdout validation).
+- **CI Soak, Brownout & Fuzz Verification**: Added `FullMatchSoakAndBrownoutTest` (3-cycle 165 A / `< 6.8 V` brownout rail-sag recovery + 160 s Blue/Red mirrored soak + bit-exact determinism) and seeded `SplittableRandom` fuzz tests across ballistics and `FrictionCircleSlipModel`.
+- **YAMS Build/CI/SPDX Parity**: Standardized `SPDX-License-Identifier: LGPL-3.0-or-later` headers across all Java files, added `.skipJavadocFormatting()` to `vendordep/build.gradle`, removed mutating `build.dependsOn spotlessApply`, bumped default version to `2027.6.5-alpha1`, and added Python exporter unit tests to `.github/workflows/ci.yml`.
+
+### 3D Non-Camera Sensor & Fault Simulation (`v2027.6.0-alpha1` — 77 JUnit 5 + 10 Python Tests)
+- **3D Environment & Chassis Sensor Models (`yacsim.core.sensors`)**: Added `SensorFaultConfig`, `QuestNavSim` (120 Hz wired VIO drift, latency, and tracking-loss injection), `Lidar3dSim` (5.55–10 Hz circumferential clustering with self-masking and static-OBB occlusion), and `FrictionCircleSlipModel` (carpet traction clamping decoupling odometry from `SimTruthPose3d`).
+- **AdvantageScope Throttling**: Upgraded `TrajectoryArcPublisher` with delta/change-detection throttling and a DataLog-only constructor option.
+
 ### Hardening, Pass-Through Factory & Code-Side CAD Repair (`v2027.4.0-alpha1` — 61 JUnit 5 + 9 Python Tests)
 - **Seamless YAMS Pass-Through Factory (`YacSimYamsFactory`)**: Pass a YAMS `*Config` + `SmartMotorController` to `createArm` / `createElevator` / `createPivot` / `createFlyWheel` (or `attachSwerve` / `registerComponent`) and get back the plain YAMS mechanism. Automatically short-circuits with zero CAD I/O on real robots (`RobotBase.isReal()`), while auto-binding, chaining nested URDF joints, and stepping `simIterate()` / `updateTelemetry()` in simulation.
 - **Nested URDF Kinematic Chaining (`YACS-AUDIT-01`)**: `YamsCommands3Bridge.bindFromManifest(...)` and new `chainFromManifest(...)` automatically compose live ancestor poses and intermediate fixed transforms in any binding order.

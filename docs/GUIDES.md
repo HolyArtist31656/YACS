@@ -279,7 +279,7 @@ Want CAD to feed your mesh paths, AdvantageScope zeroing, exact mass/inertia ten
 - **CAD-to-Code Naming Conventions**: See [CAD_CODE_NAMING_CONVENTIONS.md](CAD_CODE_NAMING_CONVENTIONS.md) for aligning Onshape subassemblies and mates with your Java mechanisms.
 - **Step-by-Step Implementation Walkthrough**: See [IMPLEMENTATION_WALKTHROUGH.md](IMPLEMENTATION_WALKTHROUGH.md) for a complete visual guide from blank project to AdvantageScope.
 
-## 6. RK4 3D Ballistics, Dual-Pose Truth, WPILib DataLog & Field Exporter (`v2027.5.0-alpha1`)
+## 6. RK4 3D Ballistics, Dual-Pose Truth, WPILib DataLog & Field Exporter (`v2027.6.5-alpha1`)
 
 ### Dual-Pose Ground Truth (`SimTruthPose3d`) & Direct `.wpilog` Recording
 
@@ -316,3 +316,9 @@ arcPub.publishActiveProjectiles(ballistics);
 ### Exporting Synced Field Polygons & 3D OBBs
 
 Use `tools/onshape-field-exporter/field_exporter.py` to generate YAECE `SeasonConfig` JSON (Andymark & Welded), PathPlanner `navgrid.json`, and YACSim `yacsim-field.json` from a single field geometry source of truth. See [`tools/onshape-field-exporter/README.md`](../tools/onshape-field-exporter/README.md).
+
+### Pairing YACSim With YALL (`VisionSim`) and YAECE (`v2027.6.5-alpha1`)
+
+- Use **YALL** (`yall.sim.VisionSim` + `CameraModel`) for simulated AprilTag and object-detection cameras (PhotonVision, Limelight, Synapse).
+- Use **YACSim** (`yacsim.core.sensors`, `yacsim.core.ballistics`, `yacsim.core.physics`) for 3D CAD/URDF kinematics, OBB collisions, `QuestNavSim`, `Lidar3dSim`, `FrictionCircleSlipModel`, and high-fidelity RK4 projectile physics.
+- Use **YAECE** (`yaece.bridges.YallTargetBridge`, `YacSim3dBridge`) for autonomous tactical arbitration and world modeling.
