@@ -1,6 +1,6 @@
 # Native Onshape URDF Export Guide (Zero-Python Workflow)
 
-Starting in **YACSim `v2027.3.0-alpha1`** and expanded with code-side CAD repair and pass-through YAMS wiring in **`v2027.4.0-alpha1`**, you can drop a **native Onshape URDF `.zip` export** straight into `src/main/deploy/yacsim/` and load it in Java—with **zero Python installation, zero Onshape API keys, and zero external conversion scripts**.
+Starting in **YACSim `v2027.6.5-alpha1`** and expanded with code-side CAD repair and pass-through YAMS wiring in **`v2027.4.0-alpha1`**, you can drop a **native Onshape URDF `.zip` export** straight into `src/main/deploy/yacsim/` and load it in Java—with **zero Python installation, zero Onshape API keys, and zero external conversion scripts**.
 
 > **Strictly Additive:** This workflow sits *alongside* every existing YACSim integration method. Your existing **Manual Java** (`CadRobotConfig`), **AdvantageScope Directory** (`fromAdvantageScopeDir`), **`yacsim-robot.json` Manifest** (`fromManifest`), and **Python Onshape REST API Exporter** (`tools/onshape-exporter/`) workflows remain 100% supported and unchanged.
 

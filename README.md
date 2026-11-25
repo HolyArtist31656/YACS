@@ -7,7 +7,7 @@
 
 ![YACSim End-to-End Architecture Pipeline](docs/images/yacsim-architecture-pipeline.jpg)
 
-**YACSim** (`v2027.5.0-alpha1`) is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** designed to pair cleanly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
+**YACSim** (`v2027.6.5-alpha1`) is a lightweight, zero-extra-dependency 3D CAD simulation vendordep for **WPILib 2027 (`2027_alpha7`, Java 25, Commands v3)** designed to pair cleanly with [YAMS (Yet Another Mechanism Suite)](https://yams.yassrobotics.com/) and [AdvantageScope](https://docs.advantagescope.org/) on the 2 GB RAM SystemCore.
 
 ## Online Installation (WPILib 2027 VS Code)
 
@@ -30,7 +30,7 @@ https://holyartist31656.github.io/YACS/vendordeps/yacsim_commands3.json
 - **Native CAD Mesh Parsing (with glTF Node-Graph Transforms & In-Memory Cache)**: Parses `.glb` / `.gltf` (glTF 2.0 with recursive scene-graph `matrix` / `T*R*S` traversal), `.obj`, and ASCII/binary `.stl` directly in Java without loading GPU buffers or pulling third-party JSON/mesh JARs.
 - **Zero-Allocation Broadphase & 15-Axis SAT Collisions**: Pre-filters separated component pairs with bounding-sphere broadphase rejection before running allocation-free 15-axis SAT and extension-envelope checks, with `ignoreRestingOverlaps()`, `ignoreCollisionPair(a, b)`, and Commands v3 `CadCollisionTriggers`.
 - **AdvantageScope 3D Pipeline**: Publishes `RobotPose`, `RobotPose3d`, `ComponentPoses`, `CollisionActive`, `CollisionDetails`, and `/YACSim/Rollers/<name>/` over NT4, exports ready-to-load `Robot_<Name>` AdvantageScope asset bundles with ordered multi-axis rotations and camera frustums, and imports existing `Robot_<Name>/config.json` directories in one line (`fromAdvantageScopeDir`).
-- **3D RK4 Projectile Ballistics & Field Exporter (`v2027.5.0-alpha1`)**: Pure-Java `yacsim.core.ballistics` (RK4 gravity, quadratic drag, Magnus spin lift, 3D OBB target/obstacle collisions, and `TrajectoryArcPublisher` `Pose3d[]` aim arcs), dual-pose `SimTruthPose3d` (`SwerveDrive::getSimPose`), direct WPILib `DataLog` struct recording, and `tools/onshape-field-exporter/` (YAECE `SeasonConfig`, PathPlanner `navgrid.json`, and `yacsim-field.json`).
+- **3D RK4 Projectile Ballistics & Field Exporter (`v2027.6.5-alpha1`)**: Pure-Java `yacsim.core.ballistics` (RK4 gravity, quadratic drag, Magnus spin lift, 3D OBB target/obstacle collisions, and `TrajectoryArcPublisher` `Pose3d[]` aim arcs), dual-pose `SimTruthPose3d` (`SwerveDrive::getSimPose`), direct WPILib `DataLog` struct recording, and `tools/onshape-field-exporter/` (YAECE `SeasonConfig`, PathPlanner `navgrid.json`, and `yacsim-field.json`).
 - **SystemCore 2 GB Performance**: Benchmarked against FRC Team 6328 Mechanical Advantage's publicly released MIT-licensed 2026 *Darwin* CAD assets (2.1M+ triangles across 5 `.glb` meshes) under a strict `-Xmx256m` robot JVM cap with `~0.64 ms` `robotPeriodic()` telemetry overhead and zero steady-state loop overruns.
 
 ## Quickstart (Pass-Through Factory)
@@ -86,3 +86,9 @@ YACSim is an **independent community project** inspired by the public open-sourc
 ## License
 
 Licensed under **LGPL-3.0**.
+
+## Waypoint A & B Upgrades (`v2027.6.0`–`v2027.6.5-alpha1`) & YASS Ecosystem Boundary
+
+- **Strict YALL Separation**: Camera and AprilTag simulation is owned by **YALL** (`yall.sim.VisionSim` + `CameraModel`). YACSim's `yacsim.core.sensors` focuses strictly on non-camera 3D environment and chassis physics simulation (`QuestNavSim`, `Lidar3dSim` with static-OBB occlusion, `FrictionCircleSlipModel`, and `SensorFaultConfig`).
+- **High-Fidelity Aerodynamic Ballistics (`yacsim.core.ballistics`)**: Added `AerodynamicCorrectionConfig` (buoyancy, sphere added mass `Cm = 0.5`, spin decay, `0.001 s` RK4 sub-stepping) and `BallisticCalibrationFitter` (two-observable range + entry-angle fitting with 25% holdout validation).
+- **Verification**: **85/85 JUnit 5 tests** (including 160 s Blue/Red mirrored full-match soak, 3-cycle brownout rail-sag recovery, and seeded `SplittableRandom` fuzzing) + **10/10 Python exporter unit tests**.

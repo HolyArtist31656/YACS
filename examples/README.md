@@ -46,7 +46,7 @@ An independent community port referencing [FRC Team 6328 Mechanical Advantage's 
 ## 5. `commands3/rebuilt_ballistics_3d_2027/` (RK4 3D Ballistics, Dual-Pose Truth & DataLog)
 
 - **Robot**: Self-contained 2026 REBUILT 3D showcase with lit `.glb` meshes (`chassis.glb`, `turret.glb`, `hood.glb`, `swerve_fork.glb`, `swerve_wheel.glb`) and `yacsim-field.json` 3D field OBBs.
-- **Highlights**: Demonstrates `v2027.5.0-alpha1` features end-to-end: dual-pose `/YACSim/SimTruthPose3d` alongside noisy odometry, direct WPILib `.wpilog` struct recording (`withDataLogEnabled(true)`), and pure-Java RK4 3D Fuel ballistics (`ProjectilePhysicsSim`, `FieldObstacle3d.loadFieldManifest(...)`, and `TrajectoryArcPublisher`).
+- **Highlights**: Demonstrates `v2027.6.5-alpha1` features end-to-end: dual-pose `/YACSim/SimTruthPose3d` alongside noisy odometry, direct WPILib `.wpilog` struct recording (`withDataLogEnabled(true)`), and pure-Java RK4 3D Fuel ballistics (`ProjectilePhysicsSim`, `FieldObstacle3d.loadFieldManifest(...)`, and `TrajectoryArcPublisher`).
 
 ```powershell
 cd examples\commands3\rebuilt_ballistics_3d_2027
