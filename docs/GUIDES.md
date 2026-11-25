@@ -278,3 +278,41 @@ Want CAD to feed your mesh paths, AdvantageScope zeroing, exact mass/inertia ten
 
 - **CAD-to-Code Naming Conventions**: See [CAD_CODE_NAMING_CONVENTIONS.md](CAD_CODE_NAMING_CONVENTIONS.md) for aligning Onshape subassemblies and mates with your Java mechanisms.
 - **Step-by-Step Implementation Walkthrough**: See [IMPLEMENTATION_WALKTHROUGH.md](IMPLEMENTATION_WALKTHROUGH.md) for a complete visual guide from blank project to AdvantageScope.
+
+## 6. RK4 3D Ballistics, Dual-Pose Truth, WPILib DataLog & Field Exporter (`v2027.5.0-alpha1`)
+
+### Dual-Pose Ground Truth (`SimTruthPose3d`) & Direct `.wpilog` Recording
+
+Publish ground-truth physics pose alongside noisy fused odometry and record directly to WPILib's `.wpilog` DataLog (even when NetworkTables 4 is disabled for competition):
+
+```java
+CadRobotConfig cfg = CadRobotConfig.fromUrdfOrZip(urdfZip, CadUrdfOptions.recommended())
+    .withDrivetrainPoseSupplier(swerve::getPose)
+    .withSimTruthPose2dSupplier(swerve::getSimPose) // publishes /YACSim/SimTruthPose3d
+    .withDataLogEnabled(true);                      // records Pose3d & Pose3d[] to DataLogManager
+```
+
+Or wire animated swerve modules and ground-truth pose in one call via `YamsCommands3Bridge.attachSwerveModulesWithTruth(cfg, swerve, ...)`.
+
+### Pure-Java RK4 3D Projectile Physics & Aim Arcs
+
+Load 3D field obstacles and scoring targets from `yacsim-field.json` and step `ProjectilePhysicsSim` at 50 Hz alongside `TrajectoryArcPublisher`:
+
+```java
+List<FieldObstacle3d> obstacles = FieldObstacle3d.loadFieldManifest(deployDir.resolve("yacsim-field.json"));
+ProjectilePhysicsSim ballistics = new ProjectilePhysicsSim()
+    .withMaxActiveProjectiles(128)
+    .addObstacles(obstacles);
+TrajectoryArcPublisher arcPub = new TrajectoryArcPublisher("YACSim", true);
+
+// Launch a 2026 REBUILT Fuel sphere with backspin (include robot chassis velocity for SOTM)
+ballistics.launch(ProjectileSpec.frcFuel2026(), muzzleOrigin, fieldLaunchVel, backspinRadPerSec);
+ballistics.step(0.02);
+arcPub.publishPredictedArc(
+    ballistics.predictArc(ProjectileSpec.frcFuel2026(), muzzleOrigin, fieldLaunchVel, backspinRadPerSec, 0.04, 40));
+arcPub.publishActiveProjectiles(ballistics);
+```
+
+### Exporting Synced Field Polygons & 3D OBBs
+
+Use `tools/onshape-field-exporter/field_exporter.py` to generate YAECE `SeasonConfig` JSON (Andymark & Welded), PathPlanner `navgrid.json`, and YACSim `yacsim-field.json` from a single field geometry source of truth. See [`tools/onshape-field-exporter/README.md`](../tools/onshape-field-exporter/README.md).

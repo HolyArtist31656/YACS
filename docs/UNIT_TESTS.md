@@ -1,6 +1,6 @@
 # Unit Tests
 
-YACSim includes **9 JUnit 5 test classes (67 tests)** under `vendordep/src/test/java/yacsim/` plus **10 Python exporter unit tests** under `tools/onshape-exporter/test_exporter.py` (**77 automated tests total**). All tests run headless on desktop without requiring a roboRIO or SystemCore.
+YACSim includes **9 JUnit 5 test classes (67 tests)** under `vendordep/src/test/java/yacsim/` plus **10 Python exporter unit tests** (9 under `tools/onshape-exporter/test_exporter.py` + 1 under `tools/onshape-field-exporter/test_field_exporter.py`) (**77 automated tests total**). All tests run headless on desktop without requiring a roboRIO or SystemCore.
 
 ## Running Tests
 
@@ -21,6 +21,7 @@ cd vendordep
 
 ```powershell
 python -m pytest tools/onshape-exporter/test_exporter.py
+python -m unittest discover -s tools/onshape-field-exporter -p "test_*.py" -v
 ```
 
 ## Java Test Classes (67 JUnit 5 Tests)
@@ -70,3 +71,7 @@ python -m pytest tools/onshape-exporter/test_exporter.py
 ## Python Onshape Exporter Tests (`tools/onshape-exporter/test_exporter.py`, 9 Tests)
 
 - URL parsing, invalid URL rejection, mock Onshape assembly/mass/bbox extraction with striped roller GLB generation, `--augment-rollers` offline round-trip, SE(3) 4×4 zeroed-transform round-trip, `YACSIM_ORIGIN` frame alignment, `PLANAR` mate filtering, `--rename`, and `--prefix yacsim_` stripping.
+
+## Python Field Exporter Tests (`tools/onshape-field-exporter/test_field_exporter.py`, 1 Test)
+
+- Verifies end-to-end export from field geometry JSON into YAECE `SeasonConfig` (Andymark & Welded variants), PathPlanner `navgrid.json`, and YACSim `yacsim-field.json` 3D field OBB manifests.

@@ -1,10 +1,10 @@
 # YACSim Examples (WPILib 2027 / Commands v3)
 
-Both examples are standalone WPILib `2027.0.0-alpha-7` GradleRIO projects configured to resolve YACSim from the relative local Maven repository (`../../../vendordep/build/maven/releases`).
+All five examples are standalone WPILib `2027.0.0-alpha-7` GradleRIO projects configured to resolve YACSim from the relative local Maven repository (`../../../vendordep/build/maven/releases`).
 
 ## Prerequisites
 
-Build and publish YACSim locally once before running either example:
+Build and publish YACSim locally once before running any example:
 
 ```powershell
 cd vendordep
@@ -35,10 +35,21 @@ An independent community port referencing [FRC Team 6328 Mechanical Advantage's 
    ```
 3. Switch the WPILib Sim GUI to **Teleoperated** and connect AdvantageScope to `127.0.0.1` to view `YACSim/RobotPose3d`, `YACSim/ComponentPoses`, `YACSim/CollisionActive`, `YACSim/CollisionDetails`, and `/YACSim/Rollers/<name>/{VelocityRPM,SurfaceSpeedMPS,Spinning}`.
 
-### 3. `commands3/darwin_6328_manifest_2027/` (Manifest-Driven CAD Automation)
+## 3. `commands3/darwin_6328_manifest_2027/` (Manifest-Driven CAD Automation)
 - **Robot**: FRC 6328 Mechanical Advantage *Darwin* (2026) referencing Darwin's [Onshape Assembly](https://cad.onshape.com/documents/2da573df9d139d7a1e0f08a8/w/5266e52966df9f56fcb472f0/e/15a6a42133f059b818ad5264).
 - **Highlights**: Loads all meshes, AdvantageScope zeroing, exact CAD mass/inertia, joint pivots, axes, hard/soft limits, drum/wheel radii, and cameras from `src/main/deploy/yacsim/darwin/yacsim-robot.json` via `CadRobotConfig.fromManifest(...)` and `YamsCommands3Bridge.bindFromManifest(...)`, leaving only CAN IDs, motor types, gear ratios, and PID/FF gains in Java.
 
-### 4. `commands3/gears_2181_2027/` (FRC Team 2181 GEARS — REVLib 2027 + YAMS + YACSim)
+## 4. `commands3/gears_2181_2027/` (FRC Team 2181 GEARS — REVLib 2027 + YAMS + YACSim)
 - **Robot**: Port of [FRCteam2181/2026-Comp-Code](https://github.com/FRCteam2181/2026-Comp-Code) (`main` branch) to WPILib 2027 Commands v3, REVLib 2027 (`SparkMax`/`SparkFlex`), YAMS 2027, and YACSim.
 - **Highlights**: All 7 mechanisms (`IntakeArm`, `Turret`, `Climber`, `Shooter`, `Spindexer`, `TopIntake`, `Input`) driven from `src/main/deploy/yacsim/gears2181/yacsim-robot.json` with automatic parent-mounted roller chaining (`TopIntake` riding on `IntakeArm`, `Shooter` riding on `Turret`), ready to drop in Team 2181's Onshape export with zero Java changes.
+
+## 5. `commands3/rebuilt_ballistics_3d_2027/` (RK4 3D Ballistics, Dual-Pose Truth & DataLog)
+
+- **Robot**: Self-contained 2026 REBUILT 3D showcase with lit `.glb` meshes (`chassis.glb`, `turret.glb`, `hood.glb`, `swerve_fork.glb`, `swerve_wheel.glb`) and `yacsim-field.json` 3D field OBBs.
+- **Highlights**: Demonstrates `v2027.5.0-alpha1` features end-to-end: dual-pose `/YACSim/SimTruthPose3d` alongside noisy odometry, direct WPILib `.wpilog` struct recording (`withDataLogEnabled(true)`), and pure-Java RK4 3D Fuel ballistics (`ProjectilePhysicsSim`, `FieldObstacle3d.loadFieldManifest(...)`, and `TrajectoryArcPublisher`).
+
+```powershell
+cd examples\commands3\rebuilt_ballistics_3d_2027
+.\setup_rebuilt_3d.ps1
+.\gradlew run "-Dorg.gradle.java.home=C:\Users\Public\wpilib\2027_alpha7\jdk"
+```

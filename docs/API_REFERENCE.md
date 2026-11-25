@@ -35,6 +35,7 @@ Direct adapters binding YAMS 2027 Commands v3 mechanisms to YACSim `Supplier<Pos
 | `static List<Supplier<Pose3d>> fromCascadingElevator(Elevator elevator, int stageCount, Translation3d base, MotionAxis axis)` | Builds proportional per-stage `Pose3d` suppliers (`1/N .. N/N`). |
 | `static Supplier<Pose3d> fromFourBar(Arm arm, Translation3d pivot, double armLengthMeters, MotionAxis axis [, boolean inverted])` | Keeps a 4-bar end-effector level while following the arm's circular arc. |
 | `static CadDrivetrainConfig fromYamsSwerve(SwerveDrive drive, ...)` | Binds `drive::getPose`, `drive::getGyroRotation3d`, and `drive::getModulePositions` directly. |
+| `static CadRobotConfig attachSwerveModulesWithTruth(CadRobotConfig config, SwerveDrive drive, ...)` | (`v2027.5.0-alpha1`) Attaches 4 animated swerve modules AND binds `drive::getSimPose` to `/YACSim/SimTruthPose3d`. |
 | `static Supplier<Pose3d> fromYamsFlyWheel(FlyWheel flywheel, Transform3d mountOffset)` | Wraps YAMS `FlyWheel.getPose3d()` with a CAD mounting offset. |
 | `static Supplier<Pose3d> fromYamsRollerMotor(SmartMotorController motor, Translation3d axle, MotionAxis axis [, boolean inverted])` | Spins a roller/wheel `.glb` directly from `motor.getMechanismPosition()`. |
 | `static Supplier<Pose3d> fromMountedYamsRoller(Supplier<Pose3d> parentPose, SmartMotorController motor, Translation3d localAxle, MotionAxis axis, boolean inverted)` | Mounts a spinning roller bar onto a moving parent mechanism. |
@@ -87,6 +88,9 @@ Fluent builder defining a simulated robot's chassis, articulated components, col
 | `withChassisAsset(CadAssetConfig asset)` | Sets chassis CAD asset directly (when not using `CadDrivetrainConfig`). |
 | `addComponent(CadComponentConfig comp)` | Adds an articulated mechanism component in AdvantageScope `model_N` order. |
 | `withDrivetrainPoseSupplier(Supplier<Pose2d> s)` | Default: `Pose2d::new`. |
+| `withSimTruthPoseSupplier(Supplier<Pose3d> s)` | Optional (`v2027.5.0-alpha1`); publishes ground-truth 3D pose to `/<tableName>/SimTruthPose3d` alongside fused odometry. |
+| `withSimTruthPose2dSupplier(Supplier<Pose2d> s)` | Optional (`v2027.5.0-alpha1`); wraps a 2D ground-truth supplier (e.g., YAMS `SwerveDrive::getSimPose`) as `/<tableName>/SimTruthPose3d`. |
+| `withDataLogEnabled(boolean enabled)` | Default: `false` (`v2027.5.0-alpha1`); writes `Pose3d`, `Pose3d[]`, and collision flags directly to WPILib `DataLogManager` (`.wpilog`) even when NT4 is off. |
 | `withTelemetryTable(String table)` | Default: `"YACSim"`. |
 | `withAdvantageScopeExportDir(Path dir)` | Optional; exports `Robot_<robotName>` bundle on simulator startup. |
 | `withAutoInstallToAdvantageScope()` / `withAutoInstallToAdvantageScope(boolean)` | Default: `false`; installs `Robot_<robotName>` directly into the OS AdvantageScope `userAssets` directory. |

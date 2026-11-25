@@ -60,10 +60,10 @@ Call `yacsim.updateTelemetry()` from `robotPeriodic()` and `yacsim.simIterate()`
 | --- | --- |
 | [Getting Started](docs/GETTING_STARTED.md) · [Implementation Walkthrough](docs/IMPLEMENTATION_WALKTHROUGH.md) | Installation, prerequisites, first simulation, and AdvantageScope setup |
 | [Guides](docs/GUIDES.md) · [Native Onshape URDF Guide](docs/ONSHAPE_URDF_GUIDE.md) · [CAD Manifest & URDF Guide](docs/CAD_MANIFEST_GUIDE.md) · [Onshape Exporter Guide](docs/ONSHAPE_EXPORTER_GUIDE.md) · [CAD-to-Code Naming Conventions](docs/CAD_CODE_NAMING_CONVENTIONS.md) | CAD prep, code-side CAD repair, multi-axis rotations, YAMS adapters, auto-calibrated collisions, and public *Darwin* CAD walkthrough |
-| [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 8 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
+| [Java API Reference](docs/API_REFERENCE.md) | Class-by-class reference across all 10 packages (+ [Hosted Javadoc](https://holyartist31656.github.io/YACS/javadoc/)) |
 | [Unit Tests](docs/UNIT_TESTS.md) | Reference for all 9 JUnit 5 test classes (**67 JUnit 5 tests**) + **10 Python exporter tests** |
 | [Architecture & Performance](docs/ARCHITECTURE.md) | SystemCore 2 GB memory model, lock-free `SimSnapshot` threading, and public *Darwin* CAD benchmarks |
-| [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027`, `darwin_6328_2027`, `darwin_6328_manifest_2027`, `gears_2181_2027`) |
+| [Examples](examples/README.md) | Runnable WPILib 2027 Commands v3 examples (`arm_and_elevator_2027`, `darwin_6328_2027`, `darwin_6328_manifest_2027`, `gears_2181_2027`, `rebuilt_ballistics_3d_2027`) |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |
 
 ## Building Locally
