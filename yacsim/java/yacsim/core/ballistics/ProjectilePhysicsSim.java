@@ -16,24 +16,62 @@ import yacsim.core.physics.ObbCollisionDetector;
 
 /**
  * Zero-dependency pure-Java 4th-order Runge-Kutta (RK4) 3D projectile physics simulator with
- * gravity, quadratic aerodynamic drag, Magnus spin lift, floor bounce/stop, and 3D OBB collision
- * against {@link FieldObstacle3d} obstacles and scoring targets.
+ * gravity, quadratic aerodynamic drag, Magnus spin lift, optional buoyancy/added-mass/spin-decay
+ * corrections at {@code 0.001 s} sub-steps, floor bounce/stop, and 3D OBB collision against {@link
+ * FieldObstacle3d} obstacles and scoring targets.
  *
- * <p>Designed to pair directly with YAECE's Shoot-on-the-Move (SOTM) solver and {@link
- * TrajectoryArcPublisher} for live AdvantageScope 3D Field visualization.
+ * <p>Designed to pair directly with YAECE's Shoot-on-the-Move (SOTM) solver, {@link
+ * BallisticCalibrationFitter}, and {@link TrajectoryArcPublisher} for live AdvantageScope 3D Field
+ * visualization.
  */
 public final class ProjectilePhysicsSim {
   private static final int DEFAULT_MAX_ACTIVE = 32;
   private static final double FLOOR_STOP_VZ_MPS = 0.25;
+
+  /**
+   * Captured landing observation when a simulated projectile crosses a target elevation plane while
+   * descending.
+   *
+   * @param landingPositionMeters Field-frame 3D crossing point in meters.
+   * @param horizontalRangeMeters Horizontal distance traveled from launch X/Y to landing X/Y in
+   *     meters.
+   * @param timeOfFlightSeconds Elapsed time from launch to target-plane crossing in seconds.
+   * @param entryAngleRad Positive downward entry angle below horizontal in radians ({@code
+   *     atan2(-vz, hypot(vx, vy))}).
+   * @param impactSpeedMps Total linear speed at crossing in m/s.
+   */
+  public record LandingObservation(
+      Translation3d landingPositionMeters,
+      double horizontalRangeMeters,
+      double timeOfFlightSeconds,
+      double entryAngleRad,
+      double impactSpeedMps) {}
 
   private final List<FieldObstacle3d> obstacles = new ArrayList<>();
   private final List<ProjectileState> projectiles = new ArrayList<>();
   private int nextId = 1;
   private int maxActiveProjectiles = DEFAULT_MAX_ACTIVE;
   private double maxLifetimeSeconds = 6.0;
+  private AerodynamicCorrectionConfig aeroConfig = AerodynamicCorrectionConfig.disabled();
 
-  /** Creates an empty projectile physics simulator. */
+  /** Creates an empty projectile physics simulator with baseline RK4 settings. */
   public ProjectilePhysicsSim() {}
+
+  /**
+   * Configures optional buoyancy, added-mass, spin-decay, and fine RK4 sub-stepping corrections.
+   *
+   * @param config Aerodynamic correction settings (non-null).
+   * @return This simulator for chaining.
+   */
+  public ProjectilePhysicsSim withAerodynamicCorrections(AerodynamicCorrectionConfig config) {
+    this.aeroConfig = Objects.requireNonNull(config, "config");
+    return this;
+  }
+
+  /** @return Current {@link AerodynamicCorrectionConfig}. */
+  public AerodynamicCorrectionConfig getAerodynamicCorrections() {
+    return aeroConfig;
+  }
 
   /**
    * Registers a static 3D field obstacle or scoring target volume.
@@ -62,8 +100,8 @@ public final class ProjectilePhysicsSim {
   }
 
   /**
-   * Configures the maximum number of retained projectiles (oldest entries are evicted when
-   * exceeded to keep SystemCore memory bounded).
+   * Configures the maximum number of retained projectiles (oldest entries are evicted when exceeded
+   * to keep SystemCore memory bounded).
    *
    * @param maxActive Positive cap (default {@code 32}).
    * @return This simulator for chaining.
@@ -144,7 +182,7 @@ public final class ProjectilePhysicsSim {
       if (!cur.active()) {
         continue;
       }
-      projectiles.set(i, integrateOne(cur, dtSeconds));
+      projectiles.set(i, integrateWithSubsteps(cur, dtSeconds));
     }
   }
 
@@ -156,7 +194,7 @@ public final class ProjectilePhysicsSim {
    * @param launchPositionMeters Launch position in meters.
    * @param initialVelocityMps Initial field-frame velocity in m/s.
    * @param spinRadPerSec Spin vector in rad/s.
-   * @param dtSeconds Integration step size in seconds (for example {@code 0.04}).
+   * @param dtSeconds Sample interval in seconds (for example {@code 0.04}).
    * @param maxSteps Maximum number of trajectory points.
    * @return Immutable list of {@link Pose3d} points along the predicted arc.
    */
@@ -176,14 +214,137 @@ public final class ProjectilePhysicsSim {
     Translation3d spin = spinRadPerSec == null ? new Translation3d() : spinRadPerSec;
     ProjectileState cur =
         new ProjectileState(
-            0, spec, launchPositionMeters, initialVelocityMps, spin, 0.0, true, false, Optional.empty());
+            0,
+            spec,
+            launchPositionMeters,
+            initialVelocityMps,
+            spin,
+            0.0,
+            true,
+            false,
+            Optional.empty());
     List<Pose3d> arc = new ArrayList<>(maxSteps + 1);
     arc.add(cur.toPose3d());
     for (int step = 0; step < maxSteps && cur.active(); step++) {
-      cur = integrateOne(cur, dtSeconds);
+      cur = integrateWithSubsteps(cur, dtSeconds);
       arc.add(cur.toPose3d());
     }
     return List.copyOf(arc);
+  }
+
+  /**
+   * Simulates a single projectile without mutating simulator state and captures the exact
+   * descending crossing through {@code targetHeightMeters} via linear sub-step interpolation.
+   *
+   * @param spec Projectile specification.
+   * @param launchPositionMeters Launch position in meters.
+   * @param initialVelocityMps Initial field-frame velocity in m/s.
+   * @param spinRadPerSec Initial angular spin vector in rad/s.
+   * @param targetHeightMeters Target plane elevation Z in meters.
+   * @param dtSeconds Integration step size in seconds (for example {@code 0.001}).
+   * @param maxSeconds Maximum flight duration to simulate in seconds.
+   * @return {@link LandingObservation} if the projectile descends through {@code targetHeightMeters},
+   *     otherwise empty.
+   */
+  public Optional<LandingObservation> simulateToLanding(
+      ProjectileSpec spec,
+      Translation3d launchPositionMeters,
+      Translation3d initialVelocityMps,
+      Translation3d spinRadPerSec,
+      double targetHeightMeters,
+      double dtSeconds,
+      double maxSeconds) {
+    Objects.requireNonNull(spec, "spec");
+    Objects.requireNonNull(launchPositionMeters, "launchPositionMeters");
+    Objects.requireNonNull(initialVelocityMps, "initialVelocityMps");
+    if (dtSeconds <= 0.0 || maxSeconds <= 0.0 || !Double.isFinite(targetHeightMeters)) {
+      return Optional.empty();
+    }
+    Translation3d spin = spinRadPerSec == null ? new Translation3d() : spinRadPerSec;
+    double px = launchPositionMeters.getX();
+    double py = launchPositionMeters.getY();
+    double pz = launchPositionMeters.getZ();
+    double vx = initialVelocityMps.getX();
+    double vy = initialVelocityMps.getY();
+    double vz = initialVelocityMps.getZ();
+    double wx = spin.getX();
+    double wy = spin.getY();
+    double wz = spin.getZ();
+
+    double t = 0.0;
+    int maxSteps = (int) Math.ceil(maxSeconds / dtSeconds);
+    double floorZ = Math.min(spec.radiusMeters(), targetHeightMeters - 0.05);
+
+    for (int i = 0; i < maxSteps; i++) {
+      double prevX = px;
+      double prevY = py;
+      double prevZ = pz;
+      double prevVx = vx;
+      double prevVy = vy;
+      double prevVz = vz;
+      double prevT = t;
+
+      double[] a1 = acceleration(spec, aeroConfig, vx, vy, vz, wx, wy, wz);
+      double vx2 = vx + 0.5 * dtSeconds * a1[0];
+      double vy2 = vy + 0.5 * dtSeconds * a1[1];
+      double vz2 = vz + 0.5 * dtSeconds * a1[2];
+
+      double[] a2 = acceleration(spec, aeroConfig, vx2, vy2, vz2, wx, wy, wz);
+      double vx3 = vx + 0.5 * dtSeconds * a2[0];
+      double vy3 = vy + 0.5 * dtSeconds * a2[1];
+      double vz3 = vz + 0.5 * dtSeconds * a2[2];
+
+      double[] a3 = acceleration(spec, aeroConfig, vx3, vy3, vz3, wx, wy, wz);
+      double vx4 = vx + dtSeconds * a3[0];
+      double vy4 = vy + dtSeconds * a3[1];
+      double vz4 = vz + dtSeconds * a3[2];
+
+      double[] a4 = acceleration(spec, aeroConfig, vx4, vy4, vz4, wx, wy, wz);
+
+      px += (dtSeconds / 6.0) * (vx + 2.0 * vx2 + 2.0 * vx3 + vx4);
+      py += (dtSeconds / 6.0) * (vy + 2.0 * vy2 + 2.0 * vy3 + vy4);
+      pz += (dtSeconds / 6.0) * (vz + 2.0 * vz2 + 2.0 * vz3 + vz4);
+
+      vx += (dtSeconds / 6.0) * (a1[0] + 2.0 * a2[0] + 2.0 * a3[0] + a4[0]);
+      vy += (dtSeconds / 6.0) * (a1[1] + 2.0 * a2[1] + 2.0 * a3[1] + a4[1]);
+      vz += (dtSeconds / 6.0) * (a1[2] + 2.0 * a2[2] + 2.0 * a3[2] + a4[2]);
+
+      if (aeroConfig.spinDecayRatePerSec() > 0.0) {
+        double decay = Math.exp(-aeroConfig.spinDecayRatePerSec() * dtSeconds);
+        wx *= decay;
+        wy *= decay;
+        wz *= decay;
+      }
+      t += dtSeconds;
+
+      // Detect descending crossing of targetHeightMeters
+      if (prevZ >= targetHeightMeters && pz <= targetHeightMeters && (vz < 0.0 || prevVz < 0.0)) {
+        double dz = prevZ - pz;
+        double alpha = dz > 1e-9 ? Math.max(0.0, Math.min(1.0, (prevZ - targetHeightMeters) / dz)) : 1.0;
+        double cx = prevX + alpha * (px - prevX);
+        double cy = prevY + alpha * (py - prevY);
+        double cvx = prevVx + alpha * (vx - prevVx);
+        double cvy = prevVy + alpha * (vy - prevVy);
+        double cvz = prevVz + alpha * (vz - prevVz);
+        double ct = prevT + alpha * dtSeconds;
+        double range = Math.hypot(cx - launchPositionMeters.getX(), cy - launchPositionMeters.getY());
+        double horizSpeed = Math.hypot(cvx, cvy);
+        double entryAngle = Math.atan2(-cvz, Math.max(1e-9, horizSpeed));
+        double impactSpeed = Math.hypot(horizSpeed, cvz);
+        return Optional.of(
+            new LandingObservation(
+                new Translation3d(cx, cy, targetHeightMeters),
+                range,
+                ct,
+                entryAngle,
+                impactSpeed));
+      }
+
+      if (pz < floorZ && vz <= 0.0) {
+        return Optional.empty();
+      }
+    }
+    return Optional.empty();
   }
 
   /** @return Immutable snapshot of all tracked projectiles (active and recently finished). */
@@ -218,6 +379,20 @@ public final class ProjectilePhysicsSim {
     projectiles.clear();
   }
 
+  private ProjectileState integrateWithSubsteps(ProjectileState s, double dt) {
+    double maxSub = aeroConfig.maxInternalSubstepSeconds();
+    if (maxSub <= 0.0 || dt <= maxSub) {
+      return integrateOne(s, dt);
+    }
+    int steps = Math.max(1, (int) Math.ceil(dt / maxSub));
+    double h = dt / steps;
+    ProjectileState cur = s;
+    for (int i = 0; i < steps && cur.active(); i++) {
+      cur = integrateOne(cur, h);
+    }
+    return cur;
+  }
+
   private ProjectileState integrateOne(ProjectileState s, double dt) {
     ProjectileSpec spec = s.spec();
     double px = s.positionMeters().getX();
@@ -230,22 +405,22 @@ public final class ProjectilePhysicsSim {
     double wy = s.spinRadPerSec().getY();
     double wz = s.spinRadPerSec().getZ();
 
-    double[] a1 = acceleration(spec, vx, vy, vz, wx, wy, wz);
+    double[] a1 = acceleration(spec, aeroConfig, vx, vy, vz, wx, wy, wz);
     double vx2 = vx + 0.5 * dt * a1[0];
     double vy2 = vy + 0.5 * dt * a1[1];
     double vz2 = vz + 0.5 * dt * a1[2];
 
-    double[] a2 = acceleration(spec, vx2, vy2, vz2, wx, wy, wz);
+    double[] a2 = acceleration(spec, aeroConfig, vx2, vy2, vz2, wx, wy, wz);
     double vx3 = vx + 0.5 * dt * a2[0];
     double vy3 = vy + 0.5 * dt * a2[1];
     double vz3 = vz + 0.5 * dt * a2[2];
 
-    double[] a3 = acceleration(spec, vx3, vy3, vz3, wx, wy, wz);
+    double[] a3 = acceleration(spec, aeroConfig, vx3, vy3, vz3, wx, wy, wz);
     double vx4 = vx + dt * a3[0];
     double vy4 = vy + dt * a3[1];
     double vz4 = vz + dt * a3[2];
 
-    double[] a4 = acceleration(spec, vx4, vy4, vz4, wx, wy, wz);
+    double[] a4 = acceleration(spec, aeroConfig, vx4, vy4, vz4, wx, wy, wz);
 
     double nx = px + (dt / 6.0) * (vx + 2.0 * vx2 + 2.0 * vx3 + vx4);
     double ny = py + (dt / 6.0) * (vy + 2.0 * vy2 + 2.0 * vy3 + vy4);
@@ -254,6 +429,12 @@ public final class ProjectilePhysicsSim {
     double nvx = vx + (dt / 6.0) * (a1[0] + 2.0 * a2[0] + 2.0 * a3[0] + a4[0]);
     double nvy = vy + (dt / 6.0) * (a1[1] + 2.0 * a2[1] + 2.0 * a3[1] + a4[1]);
     double nvz = vz + (dt / 6.0) * (a1[2] + 2.0 * a2[2] + 2.0 * a3[2] + a4[2]);
+
+    Translation3d nextSpin = s.spinRadPerSec();
+    if (aeroConfig.spinDecayRatePerSec() > 0.0) {
+      double decay = Math.exp(-aeroConfig.spinDecayRatePerSec() * dt);
+      nextSpin = new Translation3d(wx * decay, wy * decay, wz * decay);
+    }
 
     double nextAge = s.ageSeconds() + dt;
     boolean active = nextAge < maxLifetimeSeconds;
@@ -295,7 +476,7 @@ public final class ProjectilePhysicsSim {
         spec,
         new Translation3d(nx, ny, nz),
         new Translation3d(nvx, nvy, nvz),
-        s.spinRadPerSec(),
+        nextSpin,
         nextAge,
         active,
         scored,
@@ -304,6 +485,7 @@ public final class ProjectilePhysicsSim {
 
   private static double[] acceleration(
       ProjectileSpec spec,
+      AerodynamicCorrectionConfig aero,
       double vx,
       double vy,
       double vz,
@@ -311,16 +493,18 @@ public final class ProjectilePhysicsSim {
       double wy,
       double wz) {
     double speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+    double invEffMass = 1.0 / aero.effectiveMassKg(spec);
     double ax = 0.0;
     double ay = 0.0;
-    double az = -spec.gravityMps2();
+    // Net vertical force: downward weight (-m*g) + optional upward air buoyancy (+rho*V*g)
+    double az = (-spec.massKg() * spec.gravityMps2() + aero.buoyancyForceNewtons(spec)) * invEffMass;
 
     if (speed > 1e-6 && spec.airDensityKgPerM3() > 0.0) {
       double area = spec.crossSectionAreaM2();
-      double invMass = 1.0 / spec.massKg();
       // Quadratic aerodynamic drag: F_d = -0.5 * rho * Cd * A * |v| * v
       if (spec.dragCoefficient() > 0.0) {
-        double dragFactor = -0.5 * spec.airDensityKgPerM3() * spec.dragCoefficient() * area * speed * invMass;
+        double dragFactor =
+            -0.5 * spec.airDensityKgPerM3() * spec.dragCoefficient() * area * speed * invEffMass;
         ax += dragFactor * vx;
         ay += dragFactor * vy;
         az += dragFactor * vz;
@@ -332,7 +516,12 @@ public final class ProjectilePhysicsSim {
         double cy = wz * vx - wx * vz;
         double cz = wx * vy - wy * vx;
         double magnusFactor =
-            0.5 * spec.airDensityKgPerM3() * spec.magnusLiftCoefficient() * area * spec.radiusMeters() * invMass;
+            0.5
+                * spec.airDensityKgPerM3()
+                * spec.magnusLiftCoefficient()
+                * area
+                * spec.radiusMeters()
+                * invEffMass;
         ax += magnusFactor * cx;
         ay += magnusFactor * cy;
         az += magnusFactor * cz;
