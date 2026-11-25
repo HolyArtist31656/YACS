@@ -9,9 +9,6 @@ on:
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: vendordep
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -23,10 +20,21 @@ jobs:
           java-version: '25'
           cache: 'gradle'
 
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Build, format check, and run JUnit 5 tests
+        working-directory: vendordep
         run: |
           chmod +x gradlew
           ./gradlew spotlessCheck build test javadoc
+
+      - name: Run Python Onshape & Field exporter unit tests
+        run: |
+          python3 -m unittest discover -s tools/onshape-exporter -p "test_*.py" -v
+          python3 -m unittest discover -s tools/onshape-field-exporter -p "test_*.py" -v
 
       - name: Upload test reports
         if: always()

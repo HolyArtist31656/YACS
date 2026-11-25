@@ -1,6 +1,5 @@
-// Copyright (c) Yet Another Software Suite / YACSim Contributors
-// Open Source Software; you can modify and/or share it under the terms of
-// the GNU Lesser General Public License v3.0 (LGPL-3.0) in the root directory.
+// Copyright (c) 2026 Yet Another Software Suite / YACSim Contributors
+// SPDX-License-Identifier: LGPL-3.0-or-later
 
 package yacsim.core.sensors;
 
@@ -26,7 +25,7 @@ import yacsim.core.physics.BoundingBox3d;
 /**
  * CI soak and fault-injection verification suite closing VER-03 (120A+ brownout rail sag &lt; 6.8 V
  * recovery) and VER-06 (160-second Blue &amp; Red mirrored full-match soak with combined slip,
- * vision blackout, QuestNav dropout, 3D LiDAR, high-fidelity RK4 ballistics, and determinism).
+ * QuestNav dropout, 3D LiDAR, high-fidelity RK4 ballistics, and bit-exact determinism).
  */
 class FullMatchSoakAndBrownoutTest {
 
@@ -39,7 +38,6 @@ class FullMatchSoakAndBrownoutTest {
       Pose2d finalTruthPose,
       Pose2d finalOdomPose,
       double maxQuestDriftMeters,
-      int visionAcceptedFrames,
       int lidarScans,
       int projectilesLaunched,
       int slowTicksOver5Ms) {}
@@ -112,8 +110,7 @@ class FullMatchSoakAndBrownoutTest {
         1e-4,
         "Mirrored heading mismatch after 160 s");
 
-    // 2. Sensor pipelines operated cleanly across all 8,000 ticks on both alliances
-    assertTrue(blue.visionAcceptedFrames() > 500 && red.visionAcceptedFrames() > 500);
+    // 2. Non-camera 3D physics/sensor pipelines operated cleanly across all 8,000 ticks
     assertTrue(blue.lidarScans() >= 800 && red.lidarScans() >= 800);
     assertTrue(blue.projectilesLaunched() >= 40 && red.projectilesLaunched() >= 40);
     assertTrue(blue.maxQuestDriftMeters() <= 0.36 && red.maxQuestDriftMeters() <= 0.36);
@@ -138,22 +135,18 @@ class FullMatchSoakAndBrownoutTest {
     assertEquals(runA.finalOdomPose().getX(), runB.finalOdomPose().getX(), 0.0);
     assertEquals(runA.finalOdomPose().getY(), runB.finalOdomPose().getY(), 0.0);
     assertEquals(runA.maxQuestDriftMeters(), runB.maxQuestDriftMeters(), 0.0);
-    assertEquals(runA.visionAcceptedFrames(), runB.visionAcceptedFrames());
     assertEquals(runA.lidarScans(), runB.lidarScans());
   }
 
   private static SoakSummary run160SecondMatchSoak(boolean redAlliance, long seed) {
     SensorFaultConfig cfg =
-        new SensorFaultConfig(
-            seed, 0.035, 0.005, 0.06, 0.013, 0.05, 0.007, 0.012, 0.35, 5.55, 0.02, 0.48, 16.0, 1.15,
-            61.0);
+        new SensorFaultConfig(seed, 0.007, 0.012, 0.35, 5.55, 0.02, 0.48, 16.0, 1.15, 61.0);
 
     Pose2d startBlue = new Pose2d(2.0, 4.0, new Rotation2d());
     Pose2d startPose = redAlliance ? flipRotational(startBlue) : startBlue;
 
     FrictionCircleSlipModel slipModel = new FrictionCircleSlipModel(cfg, startPose);
     QuestNavSim questNav = new QuestNavSim(cfg);
-    NoisyVisionSim vision = new NoisyVisionSim(cfg);
 
     FieldObstacle3d hub =
         new FieldObstacle3d(
@@ -170,7 +163,6 @@ class FullMatchSoakAndBrownoutTest {
     Pose2d lastTruth = startPose;
     Pose2d lastOdom = startPose;
     double maxDrift = 0.0;
-    int visionFrames = 0;
     int lidarScans = 0;
     int launched = 0;
     int slowTicks = 0;
@@ -182,10 +174,7 @@ class FullMatchSoakAndBrownoutTest {
       long tStartNs = System.nanoTime();
       double tSec = tick * DT_SEC;
 
-      // Inject 3.0 s vision blackout at t = 40 s and 1.0 s QuestNav dropout at t = 90 s
-      if (tick == 2_000) {
-        vision.injectBlackout(tSec, 3.0);
-      }
+      // Inject 1.0 s QuestNav dropout at t = 90 s
       if (tick == 4_500) {
         questNav.injectTrackingLoss(tSec, 1.0);
       }
@@ -209,11 +198,8 @@ class FullMatchSoakAndBrownoutTest {
       questNav.step(tSec, truth3d);
       maxDrift = Math.max(maxDrift, questNav.getCurrentDriftMeters());
 
-      List<NoisyVisionSim.VisionMeasurement> frames = vision.step(tSec, truth3d, 3, 2.8);
-      visionFrames += frames.size();
-
-      // Re-align QuestNav on strong multi-tag frames every 5 seconds
-      if (!frames.isEmpty() && tick % 250 == 0) {
+      // Periodic external AprilTag/YALL re-alignment snap every 5 seconds
+      if (tick > 0 && tick % 250 == 0) {
         questNav.resetPose(truth3d);
       }
 
@@ -249,8 +235,7 @@ class FullMatchSoakAndBrownoutTest {
     }
 
     publisher.close();
-    return new SoakSummary(
-        lastTruth, lastOdom, maxDrift, visionFrames, lidarScans, launched, slowTicks);
+    return new SoakSummary(lastTruth, lastOdom, maxDrift, lidarScans, launched, slowTicks);
   }
 
   private static Pose2d flipRotational(Pose2d p) {
