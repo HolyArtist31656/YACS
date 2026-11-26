@@ -3,13 +3,13 @@ plugins {
     id 'idea'
     id 'org.wpilib.WPILibRepositoriesPlugin' version '2027.0.0'
     id 'org.wpilib.GradleVsCode' version '2027.0.0'
-    id 'org.wpilib.GradleRIO' version '2027.0.0-alpha-7'
+    id 'org.wpilib.GradleRIO' version '2027.0.0-alpha-8'
     id 'com.diffplug.spotless' version '8.0.0'
 }
 
-ext.wpilibVersion = "2027.0.0-alpha-7"
+ext.wpilibVersion = "2027.0.0-alpha-8"
 ext.releasePath = "$buildDir/maven"
-ext.pubVersion = System.getenv("releaseVersion") ?: System.getenv("releaseName") ?: "2027.6.5-alpha1"
+ext.pubVersion = System.getenv("releaseVersion") ?: System.getenv("releaseName") ?: "2027.6.6-alpha1"
 
 repositories {
     mavenCentral()
