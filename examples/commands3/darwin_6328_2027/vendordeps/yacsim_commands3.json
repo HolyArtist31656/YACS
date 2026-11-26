@@ -1,7 +1,7 @@
 {
     "fileName": "yacsim_commands3.json",
     "name": "Yet Another CAD Simulator (Commands v3)",
-    "version": "2027.6.5-alpha1",
+    "version": "2027.6.6-alpha1",
     "wpilibYear": "2027_alpha7",
     "uuid": "9f6b4e1a-2c7d-4e8a-9b31-7a5c8d2027c3",
     "mavenUrls": [
@@ -12,12 +12,12 @@
         {
             "groupId": "yacsim",
             "artifactId": "YACSim-core",
-            "version": "2027.6.5-alpha1"
+            "version": "2027.6.6-alpha1"
         },
         {
             "groupId": "yacsim",
             "artifactId": "YACSim-commands3",
-            "version": "2027.6.5-alpha1"
+            "version": "2027.6.6-alpha1"
         }
     ],
     "jniDependencies": [

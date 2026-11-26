@@ -1,7 +1,7 @@
 {
     "fileName": "yams_commands3.json",
     "name": "Yet Another Mechanism System (Commands v3)",
-    "version": "2026.10.19",
+    "version": "2026.11.06",
     "wpilibYear": "2027_alpha7",
     "uuid": "a1051e86-a979-4880-a28b-a0d5362d1d97",
     "mavenUrls": [
@@ -19,12 +19,12 @@
         {
             "groupId": "yams",
             "artifactId": "YAMS-core",
-            "version": "2026.10.19"
+            "version": "2026.11.06"
         },
         {
             "groupId": "yams",
             "artifactId": "YAMS-commands3",
-            "version": "2026.10.19"
+            "version": "2026.11.06"
         }
     ],
     "jniDependencies": [],

@@ -28,6 +28,8 @@ import yacsim.core.model.CadRobotConfig;
 import yacsim.core.yams.MotionAxis;
 import yacsim.core.yams.YamsMechanismBridge;
 import yams.commands3.mechanisms.Arm;
+import yams.commands3.mechanisms.DifferentialMechanism;
+import yams.commands3.mechanisms.DoubleJointedArm;
 import yams.commands3.mechanisms.Elevator;
 import yacsim.core.cad.CadAssetConfig;
 import yacsim.core.drivetrain.CadDrivetrainConfig;
@@ -398,6 +400,141 @@ public final class YamsCommands3Bridge {
    */
   public static Supplier<Pose3d> fromYamsMechanism(FlyWheel flywheel, Transform3d cadMountOffset) {
     return fromYamsFlyWheel(flywheel, cadMountOffset);
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers directly from a YAMS 2027 {@link Elevator}'s native
+   * {@code getCascadePose3d()} SPI, honoring {@code ElevatorConfig.withStages(...)} and any parent
+   * mechanism mount configured in YAMS.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param stageCount Number of stages to expose (must be at least 1).
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromYamsCascadeElevator(Elevator elevator, int stageCount) {
+    return fromYamsCascadeElevator(elevator, stageCount, new Transform3d());
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers directly from a YAMS 2027 {@link Elevator}'s native
+   * {@code getCascadePose3d()} SPI with a fixed CAD mount offset.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param stageCount Number of stages to expose (must be at least 1).
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromYamsCascadeElevator(
+      Elevator elevator, int stageCount, Transform3d cadMountOffset) {
+    Objects.requireNonNull(elevator, "elevator");
+    return YamsMechanismBridge.fromPoseListSuppliers(
+        elevator::getCascadePose3d, stageCount, cadMountOffset);
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers directly from a YAMS 2027 {@link Elevator}'s native
+   * {@code getContinuousPose3d(boolean)} SPI.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param stageCount Number of stages to expose (must be at least 1).
+   * @param carriageFirst {@code true} if the carriage moves before the intermediate stages.
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromYamsContinuousElevator(
+      Elevator elevator, int stageCount, boolean carriageFirst) {
+    return fromYamsContinuousElevator(elevator, stageCount, carriageFirst, new Transform3d());
+  }
+
+  /**
+   * Builds per-stage {@link Pose3d} suppliers directly from a YAMS 2027 {@link Elevator}'s native
+   * {@code getContinuousPose3d(boolean)} SPI with a fixed CAD mount offset.
+   *
+   * @param elevator YAMS {@link Elevator} instance.
+   * @param stageCount Number of stages to expose (must be at least 1).
+   * @param carriageFirst {@code true} if the carriage moves before the intermediate stages.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromYamsContinuousElevator(
+      Elevator elevator, int stageCount, boolean carriageFirst, Transform3d cadMountOffset) {
+    Objects.requireNonNull(elevator, "elevator");
+    return YamsMechanismBridge.fromPoseListSuppliers(
+        () -> elevator.getContinuousPose3d(carriageFirst), stageCount, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for the lower link of a YAMS 2027 {@link DoubleJointedArm}
+   * using its native {@code getPose3d()} SPI.
+   *
+   * @param arm YAMS {@link DoubleJointedArm} instance.
+   * @return Robot-relative {@link Pose3d} supplier for the lower arm link.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(DoubleJointedArm arm) {
+    return fromYamsMechanism(arm, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for the lower link of a YAMS 2027 {@link DoubleJointedArm}
+   * using its native {@code getPose3d()} SPI with a fixed CAD mount offset.
+   *
+   * @param arm YAMS {@link DoubleJointedArm} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier for the lower arm link.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(
+      DoubleJointedArm arm, Transform3d cadMountOffset) {
+    Objects.requireNonNull(arm, "arm");
+    return YamsMechanismBridge.fromPoseSupplier(arm::getPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for the upper link of a YAMS 2027 {@link DoubleJointedArm}
+   * using its native {@code getUpperPose3d()} SPI.
+   *
+   * @param arm YAMS {@link DoubleJointedArm} instance.
+   * @return Robot-relative {@link Pose3d} supplier for the upper arm link.
+   */
+  public static Supplier<Pose3d> fromYamsDoubleJointedArmUpper(DoubleJointedArm arm) {
+    return fromYamsDoubleJointedArmUpper(arm, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier for the upper link of a YAMS 2027 {@link DoubleJointedArm}
+   * using its native {@code getUpperPose3d()} SPI with a fixed CAD mount offset.
+   *
+   * @param arm YAMS {@link DoubleJointedArm} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier for the upper arm link.
+   */
+  public static Supplier<Pose3d> fromYamsDoubleJointedArmUpper(
+      DoubleJointedArm arm, Transform3d cadMountOffset) {
+    Objects.requireNonNull(arm, "arm");
+    return YamsMechanismBridge.fromPoseSupplier(arm::getUpperPose3d, cadMountOffset);
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link DifferentialMechanism}'s
+   * native {@code getPose3d()} SPI.
+   *
+   * @param mechanism YAMS {@link DifferentialMechanism} instance.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(DifferentialMechanism mechanism) {
+    return fromYamsMechanism(mechanism, new Transform3d());
+  }
+
+  /**
+   * Creates a {@link Pose3d} supplier directly from a YAMS 2027 {@link DifferentialMechanism}'s
+   * native {@code getPose3d()} SPI with a fixed CAD mount offset.
+   *
+   * @param mechanism YAMS {@link DifferentialMechanism} instance.
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier.
+   */
+  public static Supplier<Pose3d> fromYamsMechanism(
+      DifferentialMechanism mechanism, Transform3d cadMountOffset) {
+    Objects.requireNonNull(mechanism, "mechanism");
+    return YamsMechanismBridge.fromPoseSupplier(mechanism::getPose3d, cadMountOffset);
   }
 
   /**
@@ -821,6 +958,20 @@ public final class YamsCommands3Bridge {
         } else {
           unmatched.add(javaName);
         }
+      } else if (mech instanceof DoubleJointedArm dja) {
+        if (config.hasComponent(joint.childLink())) {
+          config.withComponentPoseSupplier(joint.childLink(), fromYamsMechanism(dja));
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
+      } else if (mech instanceof DifferentialMechanism diff) {
+        if (config.hasComponent(joint.childLink())) {
+          config.withComponentPoseSupplier(joint.childLink(), fromYamsMechanism(diff));
+          bound.add(javaName + " -> " + joint.name());
+        } else {
+          unmatched.add(javaName);
+        }
       } else if (mech instanceof SmartMotorController smc) {
         bindFromManifest(config, joint.name(), smc);
         bound.add(javaName + " -> " + joint.name());
@@ -830,7 +981,7 @@ public final class YamsCommands3Bridge {
                 + javaName
                 + "': "
                 + mech.getClass().getName()
-                + " (expected Arm, Elevator, Pivot, FlyWheel, or SmartMotorController).");
+                + " (expected Arm, Elevator, Pivot, FlyWheel, DoubleJointedArm, DifferentialMechanism, or SmartMotorController).");
       }
     }
 

@@ -443,4 +443,70 @@ public final class YamsMechanismBridge {
         fromSpinningWheel(rollerAngleSupplier, localAxleOffsetMeters, spinAxis, inverted);
     return chainParentChild(parentPoseSupplier, localSpin);
   }
+
+  /**
+   * Extracts a single indexed {@link Pose3d} from a multi-stage pose list supplier (such as YAMS
+   * 2027's {@code Elevator.getCascadePose3d()} or {@code Elevator.getContinuousPose3d(boolean)})
+   * with a fixed CAD mount offset.
+   *
+   * <p>Returns {@code new Pose3d()} transformed by {@code cadMountOffset} if the supplied list is
+   * {@code null} or shorter than {@code stageIndex + 1}.
+   *
+   * @param posesSupplier Supplier returning the ordered list of stage {@link Pose3d} poses.
+   * @param stageIndex Zero-based stage index to extract (must be non-negative).
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Robot-relative {@link Pose3d} supplier for the requested stage.
+   */
+  public static Supplier<Pose3d> fromPoseListSupplier(
+      Supplier<List<Pose3d>> posesSupplier, int stageIndex, Transform3d cadMountOffset) {
+    Objects.requireNonNull(posesSupplier, "posesSupplier");
+    Objects.requireNonNull(cadMountOffset, "cadMountOffset");
+    if (stageIndex < 0) {
+      throw new IllegalArgumentException("stageIndex must be non-negative: " + stageIndex);
+    }
+    return () -> {
+      List<Pose3d> poses = posesSupplier.get();
+      Pose3d pose =
+          (poses != null && stageIndex < poses.size() && poses.get(stageIndex) != null)
+              ? poses.get(stageIndex)
+              : new Pose3d();
+      return pose.transformBy(cadMountOffset);
+    };
+  }
+
+  /**
+   * Builds an unmodifiable list of {@code stageCount} per-stage {@link Pose3d} suppliers from a
+   * multi-stage pose list supplier without duplicating kinematic math.
+   *
+   * @param posesSupplier Supplier returning the ordered list of stage {@link Pose3d} poses.
+   * @param stageCount Number of stages to bind (must be at least 1).
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromPoseListSuppliers(
+      Supplier<List<Pose3d>> posesSupplier, int stageCount) {
+    return fromPoseListSuppliers(posesSupplier, stageCount, new Transform3d());
+  }
+
+  /**
+   * Builds an unmodifiable list of {@code stageCount} per-stage {@link Pose3d} suppliers from a
+   * multi-stage pose list supplier with a fixed CAD mount offset.
+   *
+   * @param posesSupplier Supplier returning the ordered list of stage {@link Pose3d} poses.
+   * @param stageCount Number of stages to bind (must be at least 1).
+   * @param cadMountOffset Fixed transform from YAMS mechanism origin to CAD mesh origin.
+   * @return Unmodifiable list of {@code stageCount} {@link Pose3d} suppliers.
+   */
+  public static List<Supplier<Pose3d>> fromPoseListSuppliers(
+      Supplier<List<Pose3d>> posesSupplier, int stageCount, Transform3d cadMountOffset) {
+    Objects.requireNonNull(posesSupplier, "posesSupplier");
+    Objects.requireNonNull(cadMountOffset, "cadMountOffset");
+    if (stageCount < 1) {
+      throw new IllegalArgumentException("stageCount must be at least 1: " + stageCount);
+    }
+    List<Supplier<Pose3d>> stages = new ArrayList<>(stageCount);
+    for (int i = 0; i < stageCount; i++) {
+      stages.add(fromPoseListSupplier(posesSupplier, i, cadMountOffset));
+    }
+    return Collections.unmodifiableList(stages);
+  }
 }
