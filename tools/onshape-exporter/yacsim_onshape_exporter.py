@@ -36,6 +36,7 @@ from se3_math import (
     mat3_from_mat4,
     mat3_mul,
     mat3_to_advantagescope_rotations,
+    mat3_to_rpy_radians,
     mat4_from_mated_cs,
     mat4_identity,
     mat4_invert_rigid,
@@ -306,6 +307,161 @@ def _extract_mass_props(raw_mp: Optional[Dict[str, Any]]) -> Optional[Dict[str, 
     }
 
 
+CAMERA_NAME_PREFIXES = (
+    "cam_",
+    "cam-",
+    "camera_",
+    "camera-",
+    "yacsim_cam_",
+    "yacsim_camera_",
+)
+CAMERA_NAME_KEYWORDS = (
+    "limelight",
+    "photon",
+    "arducam",
+    "ov9281",
+    "ov2311",
+    "questnav",
+    "apriltag_cam",
+    "vision_cam",
+)
+# Ordered from most specific to least specific so "limelight4" matches before "limelight3"/"limelight".
+CAMERA_MODEL_PRESETS: Tuple[Tuple[str, float, Tuple[int, int]], ...] = (
+    ("limelight4", 82.0, (1280, 800)),
+    ("limelight_4", 82.0, (1280, 800)),
+    ("ll4", 82.0, (1280, 800)),
+    ("limelight3g", 82.0, (1280, 960)),
+    ("limelight_3g", 82.0, (1280, 960)),
+    ("ll3g", 82.0, (1280, 960)),
+    ("limelight3", 63.3, (1280, 960)),
+    ("limelight_3", 63.3, (1280, 960)),
+    ("ll3", 63.3, (1280, 960)),
+    ("limelight2", 59.6, (960, 720)),
+    ("limelight_2", 59.6, (960, 720)),
+    ("ll2", 59.6, (960, 720)),
+    ("ov9281", 70.0, (1280, 800)),
+    ("ov2311", 70.0, (1600, 1200)),
+    ("questnav", 110.0, (1280, 720)),
+)
+DEFAULT_CAMERA_FOV_DEGREES = 70.0
+DEFAULT_CAMERA_RESOLUTION = [1280, 720]
+
+
+def _normalize_lookup_key(raw: str) -> str:
+    cleaned = raw.strip().lower()
+    for prefix in ("yacsim_camera_", "yacsim_cam_", "yacsim_", "camera_", "camera-", "cam_", "cam-"):
+        if cleaned.startswith(prefix):
+            cleaned = cleaned[len(prefix):]
+            break
+    return re.sub(r"[\s_\-]+", "", cleaned)
+
+
+def _is_camera_name(raw_name: str) -> bool:
+    low = (raw_name or "").strip().lower()
+    if not low or any(tag in low for tag in ORIGIN_CONNECTOR_NAMES):
+        return False
+    return low.startswith(CAMERA_NAME_PREFIXES) or any(kw in low for kw in CAMERA_NAME_KEYWORDS)
+
+
+def _infer_camera_optics(raw_name: str) -> Tuple[float, List[int]]:
+    low = (raw_name or "").strip().lower().replace("-", "_")
+    compact = low.replace("_", "").replace(" ", "")
+    for token, fov_deg, res in CAMERA_MODEL_PRESETS:
+        if token in low or token.replace("_", "") in compact:
+            return fov_deg, [res[0], res[1]]
+    return DEFAULT_CAMERA_FOV_DEGREES, list(DEFAULT_CAMERA_RESOLUTION)
+
+
+def _clean_camera_name(raw_name: str, fallback_idx: int) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_]+", "_", (raw_name or "").strip()).strip("_")
+    for prefix in ("yacsim_camera_", "yacsim_cam_", "yacsim_", "camera_", "cam_"):
+        if cleaned.lower().startswith(prefix) and len(cleaned) > len(prefix):
+            cleaned = cleaned[len(prefix):].lstrip("_")
+            break
+    return cleaned or f"Camera_{fallback_idx}"
+
+
+def _extract_cameras(
+    root_asm: Dict[str, Any],
+    occurrences: Dict[Tuple[str, ...], List[float]],
+    occ_by_leaf: Dict[str, List[float]],
+    t_cad_to_robot: List[float],
+    ground_shift_z: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """Extracts robot-to-camera WPILib SE(3) transforms from Onshape camera mate connectors and instances."""
+    cameras: List[Dict[str, Any]] = []
+    seen_keys = set()
+
+    # Pass 1: Explicit camera mate connectors (highest precision optical frame)
+    for feat in root_asm.get("features", []):
+        if feat.get("featureType") != "mateConnector":
+            continue
+        fd = feat.get("featureData", {})
+        raw_name = (fd.get("name") or "").strip()
+        if not _is_camera_name(raw_name):
+            continue
+        cs = fd.get("mateConnectorCS") or fd.get("matedCS")
+        if not cs:
+            continue
+        key = _normalize_lookup_key(raw_name)
+        if key in seen_keys:
+            continue
+        seen_keys.add(key)
+
+        occ_path = tuple(fd.get("occurrence") or [])
+        t_occ = (
+            occurrences.get(
+                occ_path,
+                occ_by_leaf.get(occ_path[-1], mat4_identity()) if occ_path else mat4_identity(),
+            )
+            if occ_path
+            else mat4_identity()
+        )
+        t_robot_to_cam = mat4_mul(mat4_mul(t_cad_to_robot, t_occ), mat4_from_mated_cs(cs))
+        pos = mat4_translation(t_robot_to_cam)
+        pos[2] = round(pos[2] + ground_shift_z, 6)
+        r_cam = mat3_from_mat4(t_robot_to_cam)
+        fov_deg, res = _infer_camera_optics(raw_name)
+        cameras.append({
+            "name": _clean_camera_name(raw_name, len(cameras)),
+            "position": pos,
+            "rpyRadians": mat3_to_rpy_radians(r_cam),
+            "rotations": mat3_to_advantagescope_rotations(r_cam),
+            "fovDegrees": fov_deg,
+            "resolution": res,
+        })
+
+    # Pass 2: Camera part/subassembly instances not already covered by a mate connector
+    for inst in root_asm.get("instances", []):
+        inst_id = inst.get("id")
+        raw_name = (inst.get("name") or "").strip()
+        if not inst_id or not _is_camera_name(raw_name):
+            continue
+        key = _normalize_lookup_key(raw_name)
+        if key in seen_keys:
+            continue
+        t_occ = occ_by_leaf.get(inst_id)
+        if t_occ is None:
+            continue
+        seen_keys.add(key)
+
+        t_robot_to_cam = mat4_mul(t_cad_to_robot, t_occ)
+        pos = mat4_translation(t_robot_to_cam)
+        pos[2] = round(pos[2] + ground_shift_z, 6)
+        r_cam = mat3_from_mat4(t_robot_to_cam)
+        fov_deg, res = _infer_camera_optics(raw_name)
+        cameras.append({
+            "name": _clean_camera_name(raw_name, len(cameras)),
+            "position": pos,
+            "rpyRadians": mat3_to_rpy_radians(r_cam),
+            "rotations": mat3_to_advantagescope_rotations(r_cam),
+            "fovDegrees": fov_deg,
+            "resolution": res,
+        })
+
+    return cameras
+
+
 def _find_robot_origin_transform(root_asm: Dict[str, Any]) -> List[float]:
     for feat in root_asm.get("features", []):
         if feat.get("featureType") != "mateConnector":
@@ -397,8 +553,10 @@ def build_manifest_from_onshape_payloads(
     t_cad_to_robot = _find_robot_origin_transform(root_asm)
 
     chassis_zero_pos = mat4_translation(t_cad_to_robot)
+    ground_shift_z = 0.0
     if bboxes and bboxes.get("lowZ") is not None:
-        chassis_zero_pos[2] = round(chassis_zero_pos[2] - float(bboxes["lowZ"]), 6)
+        ground_shift_z = -float(bboxes["lowZ"])
+        chassis_zero_pos[2] = round(chassis_zero_pos[2] + ground_shift_z, 6)
     chassis_r = mat3_from_mat4(t_cad_to_robot)
     if gltf_yup:
         chassis_r = mat3_mul(chassis_r, GLTF_YUP_TO_NWU_R)
@@ -573,7 +731,7 @@ def build_manifest_from_onshape_payloads(
         "chassis": chassis_entry,
         "links": links,
         "joints": joints,
-        "cameras": [],
+        "cameras": _extract_cameras(root_asm, occurrences, occ_by_leaf, t_cad_to_robot, ground_shift_z),
     }
 
 

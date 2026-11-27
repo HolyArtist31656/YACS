@@ -49,6 +49,45 @@ import yacsim.core.yams.MotionAxis;
  * runtime JARs are added to SystemCore.
  */
 public final class CadManifestLoader {
+  private static final double DEFAULT_CAMERA_FOV_DEGREES = 70.0;
+  private static final int DEFAULT_CAMERA_WIDTH_PX = 1280;
+  private static final int DEFAULT_CAMERA_HEIGHT_PX = 720;
+
+  private static final List<String> CAMERA_NAME_PREFIXES =
+      List.of("cam_", "cam-", "camera_", "camera-", "yacsim_cam_", "yacsim_camera_");
+
+  private static final List<String> CAMERA_NAME_KEYWORDS =
+      List.of(
+          "limelight",
+          "photon",
+          "arducam",
+          "ov9281",
+          "ov2311",
+          "questnav",
+          "apriltag_cam",
+          "vision_cam");
+
+  private record CameraOpticsPreset(
+      String token, double fovDegrees, int widthPx, int heightPx) {}
+
+  private static final List<CameraOpticsPreset> CAMERA_OPTICS_PRESETS =
+      List.of(
+          new CameraOpticsPreset("limelight4", 82.0, 1280, 800),
+          new CameraOpticsPreset("limelight_4", 82.0, 1280, 800),
+          new CameraOpticsPreset("ll4", 82.0, 1280, 800),
+          new CameraOpticsPreset("limelight3g", 82.0, 1280, 960),
+          new CameraOpticsPreset("limelight_3g", 82.0, 1280, 960),
+          new CameraOpticsPreset("ll3g", 82.0, 1280, 960),
+          new CameraOpticsPreset("limelight3", 63.3, 1280, 960),
+          new CameraOpticsPreset("limelight_3", 63.3, 1280, 960),
+          new CameraOpticsPreset("ll3", 63.3, 1280, 960),
+          new CameraOpticsPreset("limelight2", 59.6, 960, 720),
+          new CameraOpticsPreset("limelight_2", 59.6, 960, 720),
+          new CameraOpticsPreset("ll2", 59.6, 960, 720),
+          new CameraOpticsPreset("ov9281", 70.0, 1280, 800),
+          new CameraOpticsPreset("ov2311", 70.0, 1600, 1200),
+          new CameraOpticsPreset("questnav", 110.0, 1280, 720));
+
   private CadManifestLoader() {}
 
   /**
@@ -424,6 +463,8 @@ public final class CadManifestLoader {
       joints = shiftedJoints;
     }
 
+    List<CadCameraConfig> cameras = extractUrdfCameras(linkElements, chassisEl, joints);
+
     return new CadRobotManifest(
         CadRobotManifest.CURRENT_SCHEMA_VERSION,
         robotName,
@@ -436,7 +477,7 @@ public final class CadManifestLoader {
         Optional.ofNullable(chassis),
         articulated,
         joints,
-        List.of());
+        cameras);
   }
 
   /**
@@ -798,6 +839,89 @@ public final class CadManifestLoader {
       cur = parent;
     }
     return null;
+  }
+
+  private static boolean isCameraLinkName(String rawName) {
+    if (rawName == null || rawName.isBlank()) {
+      return false;
+    }
+    String low = rawName.trim().toLowerCase(Locale.ROOT);
+    for (String prefix : CAMERA_NAME_PREFIXES) {
+      if (low.startsWith(prefix)) {
+        return true;
+      }
+    }
+    for (String kw : CAMERA_NAME_KEYWORDS) {
+      if (low.contains(kw)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static String cleanCameraDisplayName(String rawName) {
+    String cleaned = rawName.trim();
+    String low = cleaned.toLowerCase(Locale.ROOT);
+    for (String prefix :
+        new String[] {
+          "yacsim_camera_", "yacsim_cam_", "yacsim_", "camera_", "camera-", "cam_", "cam-"
+        }) {
+      if (low.startsWith(prefix) && cleaned.length() > prefix.length()) {
+        cleaned = cleaned.substring(prefix.length());
+        break;
+      }
+    }
+    while (cleaned.startsWith("_") || cleaned.startsWith("-")) {
+      cleaned = cleaned.substring(1);
+    }
+    return cleaned.isBlank() ? rawName.trim() : cleaned;
+  }
+
+  private static CameraOpticsPreset inferCameraOptics(String rawName) {
+    String low = rawName.trim().toLowerCase(Locale.ROOT).replace('-', '_');
+    String compact = low.replace("_", "").replace(" ", "");
+    for (CameraOpticsPreset preset : CAMERA_OPTICS_PRESETS) {
+      if (low.contains(preset.token())
+          || compact.contains(preset.token().replace("_", ""))) {
+        return preset;
+      }
+    }
+    return new CameraOpticsPreset(
+        "default", DEFAULT_CAMERA_FOV_DEGREES, DEFAULT_CAMERA_WIDTH_PX, DEFAULT_CAMERA_HEIGHT_PX);
+  }
+
+  private static List<CadCameraConfig> extractUrdfCameras(
+      List<Element> linkElements, Element chassisEl, List<CadJointManifest> joints) {
+    Map<String, CadJointManifest> parentJointByChild = new LinkedHashMap<>();
+    for (CadJointManifest j : joints) {
+      parentJointByChild.putIfAbsent(j.childLink(), j);
+    }
+    List<CadCameraConfig> cameras = new ArrayList<>();
+    Set<String> seenKeys = new LinkedHashSet<>();
+    for (Element el : linkElements) {
+      if (el == chassisEl) {
+        continue;
+      }
+      String linkName = el.getAttribute("name");
+      if (!isCameraLinkName(linkName)) {
+        continue;
+      }
+      String key = CadRobotManifest.normalizeCameraName(linkName);
+      if (!seenKeys.add(key)) {
+        continue;
+      }
+      Pose3d pose = computeCumulativeUrdfPose(linkName, parentJointByChild);
+      Transform3d robotToCamera = new Transform3d(pose.getTranslation(), pose.getRotation());
+      CameraOpticsPreset optics = inferCameraOptics(linkName);
+      cameras.add(
+          new CadCameraConfig(
+              cleanCameraDisplayName(linkName),
+              robotToCamera,
+              optics.fovDegrees(),
+              optics.widthPx(),
+              optics.heightPx()));
+    }
+    return cameras;
   }
 
   private static Pose3d computeCumulativeUrdfPose(

@@ -6,10 +6,14 @@ package yacsim.core.manifest;
 import static org.wpilib.units.Units.KilogramSquareMeters;
 import static org.wpilib.units.Units.Kilograms;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalDouble;
+import org.wpilib.math.geometry.Transform3d;
 import org.wpilib.units.measure.Mass;
 import org.wpilib.units.measure.MomentOfInertia;
 import yacsim.core.advantagescope.CadCameraConfig;
@@ -282,5 +286,123 @@ public record CadRobotManifest(
       }
     }
     return fallback;
+  }
+
+  /**
+   * Normalizes a CAD or Java camera name for forgiving lookup (strips optional {@code yacsim_},
+   * {@code cam_}, or {@code camera_} prefixes, spaces, hyphens, and underscores, and lowercases).
+   *
+   * @param raw Raw camera name.
+   * @return Canonical camera comparison key.
+   */
+  public static String normalizeCameraName(String raw) {
+    if (raw == null) {
+      return "";
+    }
+    String cleaned = raw.trim().toLowerCase(java.util.Locale.ROOT);
+    for (String prefix :
+        new String[] {
+          "yacsim_camera_",
+          "yacsim-camera-",
+          "yacsim_cam_",
+          "yacsim-cam-",
+          "yacsim_",
+          "yacsim-",
+          "camera_",
+          "camera-",
+          "cam_",
+          "cam-"
+        }) {
+      if (cleaned.startsWith(prefix)) {
+        cleaned = cleaned.substring(prefix.length());
+        break;
+      }
+    }
+    return cleaned.replaceAll("[\\s_\\-]+", "");
+  }
+
+  /**
+   * Finds a camera configuration by name (exact match first, then case/separator-insensitive, then
+   * stripping optional {@code cam_}/{@code camera_}/{@code yacsim_} prefixes).
+   *
+   * @param cameraName Camera name to look up.
+   * @return Matching {@link CadCameraConfig}, if present.
+   */
+  public Optional<CadCameraConfig> findCamera(String cameraName) {
+    Objects.requireNonNull(cameraName, "cameraName");
+    Optional<CadCameraConfig> exact =
+        cameras.stream().filter(c -> c.name().equals(cameraName)).findFirst();
+    if (exact.isPresent()) {
+      return exact;
+    }
+    String target = normalizeName(cameraName);
+    Optional<CadCameraConfig> normalized =
+        cameras.stream().filter(c -> normalizeName(c.name()).equals(target)).findFirst();
+    if (normalized.isPresent()) {
+      return normalized;
+    }
+    String camTarget = normalizeCameraName(cameraName);
+    return cameras.stream().filter(c -> normalizeCameraName(c.name()).equals(camTarget)).findFirst();
+  }
+
+  /**
+   * Returns a camera configuration by name (exact match first, then forgiving lookup) or throws an
+   * {@link IllegalArgumentException} listing all available camera names.
+   *
+   * @param cameraName Camera name to look up.
+   * @return Matching {@link CadCameraConfig}.
+   */
+  public CadCameraConfig getCamera(String cameraName) {
+    return findCamera(cameraName)
+        .orElseThrow(
+            () -> {
+              List<String> avail = cameras.stream().map(CadCameraConfig::name).toList();
+              return new IllegalArgumentException(
+                  "Camera '"
+                      + cameraName
+                      + "' not found in CAD manifest for "
+                      + robotName
+                      + ". Available cameras: "
+                      + avail);
+            });
+  }
+
+  /**
+   * Returns the CAD-extracted robot-to-camera {@link Transform3d} for the named camera, ready to
+   * pass directly into vision libraries such as YALL ({@code PhotonVisionWrapper} / {@code
+   * LimelightWrapper}) or WPILib pose estimators.
+   *
+   * @param cameraName Camera name to look up.
+   * @return Robot-to-camera {@link Transform3d} in meters and radians.
+   */
+  public Transform3d getCameraTransform(String cameraName) {
+    return getCamera(cameraName).robotToCamera();
+  }
+
+  /**
+   * Returns the CAD-extracted robot-to-camera {@link Transform3d} for {@code cameraName}, or {@code
+   * fallback} if no matching camera exists in the manifest.
+   *
+   * @param cameraName Camera name to look up.
+   * @param fallback Fallback {@link Transform3d} returned when the camera is absent.
+   * @return CAD robot-to-camera transform or {@code fallback}.
+   */
+  public Transform3d getCameraTransformOr(String cameraName, Transform3d fallback) {
+    Objects.requireNonNull(fallback, "fallback");
+    return findCamera(cameraName).map(CadCameraConfig::robotToCamera).orElse(fallback);
+  }
+
+  /**
+   * Returns an unmodifiable insertion-ordered map of every CAD-extracted camera name to its
+   * robot-to-camera {@link Transform3d}.
+   *
+   * @return Map from camera name to robot-to-camera {@link Transform3d}.
+   */
+  public Map<String, Transform3d> getCameraTransforms() {
+    Map<String, Transform3d> out = new LinkedHashMap<>(cameras.size());
+    for (CadCameraConfig cam : cameras) {
+      out.put(cam.name(), cam.robotToCamera());
+    }
+    return Collections.unmodifiableMap(out);
   }
 }
