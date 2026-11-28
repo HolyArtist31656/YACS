@@ -14,6 +14,7 @@ from se3_math import (
     compose_advantagescope_rotations,
     compute_zeroed_transform,
     mat3_from_mat4,
+    mat3_to_rpy_radians,
     mat3_mul,
     mat4_mul,
     rot_axis_deg,
@@ -346,6 +347,87 @@ class OnshapeExporterTest(unittest.TestCase):
         self.assertEqual(manifest["joints"][0]["name"], "IntakeArm")
         self.assertEqual(manifest["links"][0]["name"], "IntakeArm")
 
+
+
+    def test_mat3_to_rpy_radians_round_trips_camera_mount_angles(self) -> None:
+        roll_deg, pitch_deg, yaw_deg = 5.0, -18.5, 32.0
+        r = mat3_mul(
+            rot_axis_deg("z", yaw_deg),
+            mat3_mul(rot_axis_deg("y", pitch_deg), rot_axis_deg("x", roll_deg)),
+        )
+        roll, pitch, yaw = mat3_to_rpy_radians(r)
+        self.assertAlmostEqual(math.degrees(roll), roll_deg, places=3)
+        self.assertAlmostEqual(math.degrees(pitch), pitch_deg, places=3)
+        self.assertAlmostEqual(math.degrees(yaw), yaw_deg, places=3)
+
+    def test_extracts_cameras_from_mate_connectors_and_instances_with_ground_shift(self) -> None:
+        r_pitch_up = rot_axis_deg("y", -15.0)
+        r_rear = rot_axis_deg("z", 180.0)
+        asm_def = {
+            "rootAssembly": {
+                "instances": [
+                    {"id": "inst_chassis", "name": "Chassis", "type": "Assembly"},
+                    {"id": "inst_ll4", "name": "Limelight4_Rear", "type": "Part"},
+                    {"id": "inst_front_dup", "name": "cam_front_ov9281", "type": "Part"},
+                ],
+                "occurrences": [
+                    {"path": ["inst_chassis"], "transform": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]},
+                    {
+                        "path": ["inst_ll4"],
+                        "transform": [
+                            r_rear[0][0], r_rear[0][1], r_rear[0][2], -0.31,
+                            r_rear[1][0], r_rear[1][1], r_rear[1][2], 0.0,
+                            r_rear[2][0], r_rear[2][1], r_rear[2][2], 0.42,
+                            0.0, 0.0, 0.0, 1.0,
+                        ],
+                    },
+                    {"path": ["inst_front_dup"], "transform": [1, 0, 0, 0.99, 0, 1, 0, 0, 0, 0, 1, 0.99, 0, 0, 0, 1]},
+                ],
+                "features": [
+                    {
+                        "id": "mc_front",
+                        "featureType": "mateConnector",
+                        "featureData": {
+                            "name": "cam_front_ov9281",
+                            "occurrence": ["inst_chassis"],
+                            "mateConnectorCS": {
+                                "origin": [0.28, 0.14, 0.35],
+                                "xAxis": [r_pitch_up[0][0], r_pitch_up[1][0], r_pitch_up[2][0]],
+                                "zAxis": [r_pitch_up[0][2], r_pitch_up[1][2], r_pitch_up[2][2]],
+                            },
+                        },
+                    }
+                ],
+            }
+        }
+        bboxes = {"lowX": -0.35, "highX": 0.35, "lowY": -0.35, "highY": 0.35, "lowZ": -0.04, "highZ": 0.65}
+        manifest = build_manifest_from_onshape_payloads(
+            robot_name="CameraBot",
+            source_url=DARWIN_URL,
+            assembly_def=asm_def,
+            bboxes=bboxes,
+            generate_roller_meshes=False,
+        )
+        cams = {c["name"]: c for c in manifest["cameras"]}
+        self.assertEqual(len(cams), 2)
+        self.assertIn("front_ov9281", cams)
+        self.assertIn("Limelight4_Rear", cams)
+
+        front = cams["front_ov9281"]
+        self.assertAlmostEqual(front["position"][0], 0.28, places=5)
+        self.assertAlmostEqual(front["position"][1], 0.14, places=5)
+        # Ground shift +0.04 applied to Z
+        self.assertAlmostEqual(front["position"][2], 0.39, places=5)
+        self.assertAlmostEqual(math.degrees(front["rpyRadians"][1]), -15.0, places=3)
+        self.assertAlmostEqual(front["fovDegrees"], 70.0, places=3)
+        self.assertEqual(front["resolution"], [1280, 800])
+
+        rear = cams["Limelight4_Rear"]
+        self.assertAlmostEqual(rear["position"][0], -0.31, places=5)
+        self.assertAlmostEqual(rear["position"][2], 0.46, places=5)
+        self.assertAlmostEqual(abs(math.degrees(rear["rpyRadians"][2])), 180.0, places=3)
+        self.assertAlmostEqual(rear["fovDegrees"], 82.0, places=3)
+        self.assertEqual(rear["resolution"], [1280, 800])
 
 if __name__ == "__main__":
     unittest.main()

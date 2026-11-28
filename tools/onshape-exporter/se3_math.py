@@ -153,6 +153,26 @@ def mat3_to_advantagescope_rotations(r: Mat3, eps_deg: float = 1e-4) -> List[Dic
     return out
 
 
+def mat3_to_rpy_radians(r: Mat3, eps_rad: float = 1e-9) -> List[float]:
+    """Decomposes a 3x3 rotation matrix R = Rz(yaw) * Ry(pitch) * Rx(roll) into [roll, pitch, yaw] radians.
+
+    Matches WPILib ``Rotation3d(roll, pitch, yaw)`` intrinsic ZYX / extrinsic XYZ convention.
+    """
+    sin_ry = max(-1.0, min(1.0, -r[2][0]))
+    ry = math.asin(sin_ry)
+    cos_ry = math.cos(ry)
+    if abs(cos_ry) > 1e-6:
+        rx = math.atan2(r[2][1], r[2][2])
+        rz = math.atan2(r[1][0], r[0][0])
+    else:
+        rx = 0.0
+        rz = math.atan2(-r[0][1], r[1][1])
+    return [
+        0.0 if abs(rx) < eps_rad else round(rx, 6),
+        0.0 if abs(ry) < eps_rad else round(ry, 6),
+        0.0 if abs(rz) < eps_rad else round(rz, 6),
+    ]
+
 # Standard glTF Y-up -> WPILib NWU Z-up rotation: Rz(+90) * Rx(+90)
 GLTF_YUP_TO_NWU_R: Mat3 = mat3_mul(rot_axis_deg("z", 90.0), rot_axis_deg("x", 90.0))
 
