@@ -27,7 +27,7 @@ $yacsimJsonPath = Join-Path $vendordepSrc "build\vendordeps\yacsim_commands3.jso
 if (-not (Test-Path $yacsimJsonPath)) {
     throw "Missing $yacsimJsonPath. Run '.\gradlew publish generateVendordepJson' in $vendordepSrc first."
 }
-$localMavenUrl = "file:///" + ($vendordepSrc -replace "\\", "/") + "/build/maven/releases/"
+$localMavenUrl = "file:" + "///" + ($vendordepSrc -replace "\\", "/") + "/build/maven/releases/"
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $yacsimJson = [System.IO.File]::ReadAllText($yacsimJsonPath) -replace "https://holyartist31656\.github\.io/YACS/maven/releases/", $localMavenUrl
 [System.IO.File]::WriteAllText((Join-Path $vdir "yacsim_commands3.json"), $yacsimJson, $utf8NoBom)

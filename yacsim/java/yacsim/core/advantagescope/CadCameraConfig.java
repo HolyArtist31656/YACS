@@ -27,7 +27,7 @@ public record CadCameraConfig(
   public CadCameraConfig {
     Objects.requireNonNull(name, "name");
     Objects.requireNonNull(robotToCamera, "robotToCamera");
-    if (fovDegrees <= 0.0 || fovDegrees >= 180.0) {
+    if (!Double.isFinite(fovDegrees) || fovDegrees <= 0.0 || fovDegrees >= 180.0) {
       throw new IllegalArgumentException("fovDegrees must be in (0, 180).");
     }
     if (resolutionWidthPx <= 0 || resolutionHeightPx <= 0) {
