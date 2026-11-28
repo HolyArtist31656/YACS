@@ -89,7 +89,8 @@ class CadCameraExtractionTest {
     assertEquals(82.0, ll4.fovDegrees(), 1e-6);
     assertEquals(1280, ll4.resolutionWidthPx());
     assertEquals(800, ll4.resolutionHeightPx());
-    assertEquals(-0.32, manifest.getCameraTransform("Limelight4_Rear").getX(), LINEAR_TOLERANCE_METERS);
+    assertEquals(
+        -0.32, manifest.getCameraTransform("Limelight4_Rear").getX(), LINEAR_TOLERANCE_METERS);
 
     CadCameraConfig quest = manifest.getCamera("questnav_mount");
     assertEquals(110.0, quest.fovDegrees(), 1e-6);
