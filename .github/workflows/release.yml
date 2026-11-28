@@ -9,7 +9,7 @@ on:
       version:
         description: 'Release version (e.g. 2027.3.0-alpha1)'
         required: false
-        default: '2027.6.5-alpha1'
+        default: '2027.6.6-alpha1'
 
 permissions:
   contents: read
@@ -89,10 +89,6 @@ jobs:
             <ul>
               <li><a href="javadoc/">Java API Documentation (Javadoc)</a></li>
               <li><a href="vendordeps/yacsim_commands3.json">yacsim_commands3.json</a></li>
-              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/GETTING_STARTED.md">Getting Started Guide</a></li>
-              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/GUIDES.md">How-To Guides &amp; FRC 6328 Darwin Walkthrough</a></li>
-              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/API_REFERENCE.md">Markdown API Reference</a></li>
-              <li><a href="https://github.com/HolyArtist31656/YACS/blob/main/docs/UNIT_TESTS.md">Unit Tests Reference</a></li>
               <li><a href="https://github.com/HolyArtist31656/YACS">GitHub Repository</a></li>
             </ul>
           </body>
