@@ -31,7 +31,7 @@ Turn your Onshape CAD assembly or URDF into a physics-validated **3D FRC 2027 di
 
 ## Installation (WPILib 2027 Vendordep)
 
-Copy `vendordeps/YACSim.json` into your robot project's `vendordeps/` directory (or publish locally from `vendordep/` with `./gradlew publishToMavenLocal`). See [Install YACS](docs/documentation/tutorials/install-yacs.md) for full details.
+Copy `vendordeps/yacsim_commands3.json` into your robot project's `vendordeps/` directory (or publish locally from `vendordep/` with `./gradlew publishToMavenLocal`). See [Install YACS](docs/documentation/tutorials/install-yacs.md) for full details.
 
 ## Quick Example
 
