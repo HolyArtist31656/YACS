@@ -2,7 +2,7 @@
     "fileName": "yacsim.json",
     "name": "Yet Another CAD Simulator",
     "version": "${version}",
-    "wpilibYear": "2027",
+    "wpilibYear": "2027_alpha7",
     "uuid": "${uuid}",
     "mavenUrls": [
         "https://holyartist31656.github.io/YACS/maven/releases/"
