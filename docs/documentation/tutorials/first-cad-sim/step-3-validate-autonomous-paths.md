@@ -40,4 +40,11 @@ void autoPathDoesNotTipOrSkid() {
 **Real-world lesson:** If `report.feasible()` returns `false` with a tip violation at sample `k`, lower `maxLinearAccelMps2` in your YAPL `MotionConstraints` (e.g., from `4.5 m/s²` down to `3.5 m/s²`) or keep your elevator stowed while cornering!
 {% endhint %}
 
-Next: [Step 4: View 3D Telemetry in AdvantageScope](step-4-advantagescope-3d.md).
+## Check it
+
+Run `./gradlew test` and confirm `assertTrue(report.feasible(), report.summary())` passes for your safe path and fails if you double the acceleration limit.
+
+## If it did not work
+
+* **Report is unexpectedly feasible on an empty path:** Ensure your sampled waypoint list contains at least two waypoints before calling `validate(...)`.
+* **Slip saturation warnings on every turn:** Check that you picked the matching `TreadPreset` (such as `COLSON_GRIP` or `NITRILE_CARPET`) for your wheels.

@@ -17,3 +17,7 @@ By the end of this tutorial, you will load your robot manifest, model dynamic we
 | [Step 2: Add Chassis Dynamics & Terrain](step-2-chassis-dynamics-and-terrain.md) | Configure `DynamicWeightTransferModel`, `TireSlipCurveModel`, and `TerrainBumpHeightmap`. |
 | [Step 3: Validate Autonomous Paths in CI](step-3-validate-autonomous-paths.md) | Run `PathTrajectoryValidator` in JUnit 5 to catch tip or slip violations automatically. |
 | [Step 4: View 3D Telemetry in AdvantageScope](step-4-advantagescope-3d.md) | Stream `Pose3d` chassis tilt, mechanism poses, and ballistics to AdvantageScope. |
+
+{% hint style="info" %}
+**Before you start:** You should know basic Java and have a WPILib 2027 project with [AdvantageScope](https://docs.advantagescope.org/) installed. No prior CAD physics experience is required.
+{% endhint %}

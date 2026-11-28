@@ -29,5 +29,5 @@ If you published YACS locally from `YACS/vendordep` with `.\gradlew publishToMav
 {% endstepper %}
 
 {% hint style="info" %}
-**YAMS 2027 Compatibility:** YACS `v2027.6.6-alpha1` connects directly to YAMS's public Pose SPI (`getCascadePose3d`, `getContinuousPose3d`, `getUpperPose3d`, `DifferentialMechanism.getPose3d`) — no reflection hacks needed.
+**YAMS 2027 Compatibility:** YACS `v2027.6.6-alpha1` connects directly to YAMS's public Pose SPI (`getCascadePose3d`, `getContinuousPose3d`, `getUpperPose3d`, `DifferentialMechanism.getPose3d`), no reflection hacks needed.
 {% endhint %}

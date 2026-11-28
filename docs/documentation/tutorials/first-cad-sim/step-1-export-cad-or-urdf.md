@@ -34,4 +34,11 @@ CadRobotManifest manifest = result.manifest();
 {% endtab %}
 {% endtabs %}
 
-Next: [Step 2: Add Chassis Dynamics & Terrain](step-2-chassis-dynamics-and-terrain.md).
+## Check it
+
+Confirm `manifest.json` exists in `src/main/deploy/yacsim/` and `CadManifestLoader.load(...)` returns your expected links and cameras with zero warnings.
+
+## If it did not work
+
+* **File not found at runtime:** Confirm the file is under `src/main/deploy/`, not `src/main/resources/`.
+* **Missing cameras in `manifest.cameras()`:** Name camera parts with a supported prefix (`cam_`, `limelight`, or `photon`) in Onshape or URDF.

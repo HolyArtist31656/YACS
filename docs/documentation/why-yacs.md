@@ -6,7 +6,7 @@ icon: rocket
 
 ## The problem with "magic carpet" simulations
 
-Default FRC simulations assume infinite tire grip, a flat table-top floor, zero chassis weight transfer, and vacuum ballistics. Your autonomous routine looks flawless on your laptop — then at your first regional, the robot lifts its inside wheels on a sharp turn, bounces over a cable protector, and shoots 30 cm short because of air drag.
+Default FRC simulations assume infinite tire grip, a flat table-top floor, zero chassis weight transfer, and vacuum ballistics. Your autonomous routine looks flawless on your laptop, then at your first regional, the robot lifts its inside wheels on a sharp turn, bounces over a cable protector, and shoots 30 cm short because of air drag.
 
 ## What YACS gives your team
 
