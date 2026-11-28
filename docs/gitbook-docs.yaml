@@ -29,7 +29,6 @@ site:
           default: true
           content:
             directory: ./documentation
-            language: en
     - type: section
       key: section-3
       title: API Reference
