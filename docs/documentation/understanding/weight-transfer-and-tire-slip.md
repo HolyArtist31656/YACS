@@ -14,4 +14,4 @@ Once `ΔN_side` exceeds half the robot's weight (`m · g / 2`), the inside wheel
 
 ### Why peak-to-kinetic tire slip matters
 
-Real swerve treads (Colson, Blue Nitrile) build peak grip around **12–18% slip ratio**. Past that peak, friction drops down to the lower kinetic value — which is why flooring the throttle on dusty carpet *reduces* acceleration and corrupts wheel odometry. `TireSlipCurveModel` captures this exact drop-off so you can test traction control and skid recovery before match day.
+Real swerve treads (Colson, Blue Nitrile) build peak grip around **12–18% slip ratio**. Past that peak, friction drops down to the lower kinetic value, which is why flooring the throttle on dusty carpet *reduces* acceleration and corrupts wheel odometry. `TireSlipCurveModel` captures this exact drop-off so you can test traction control and skid recovery before match day.

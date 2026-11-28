@@ -43,4 +43,11 @@ if (loads.isWheelLifting()) {
 }
 ```
 
-Next: [Step 3: Validate Autonomous Paths in CI](step-3-validate-autonomous-paths.md).
+## Check it
+
+Run `./gradlew test` and verify `DynamicWeightTransferModel` reports `tipRiskRatio < 1.0` on flat carpet and a non-zero pitch angle when crossing a cable protector.
+
+## If it did not work
+
+* **Instant tip-over reported on flat ground:** Check that track width, wheelbase, and CG height are in meters (not inches).
+* **Zero height change over a bump:** Confirm the robot's `(x, y)` coordinates overlap the rectangle passed to `addCableProtector(...)`.

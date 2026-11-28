@@ -20,7 +20,7 @@ layout:
 
 <h2 align="center"><mark style="color:$primary;">Yet Another CAD Simulator (YACS)</mark></h2>
 
-<p align="center">Export your robot once from Onshape or URDF. YACS gives you real mass/MoI physics, 3-wheel tip detection, Pacejka tire slip, field bump terrain, RK4 game-piece ballistics, and AdvantageScope 3D visualization — before your robot ever hits carpet.</p>
+<p align="center">Export your robot once from Onshape or URDF. YACS gives you real mass/MoI physics, 3-wheel tip detection, Pacejka tire slip, field bump terrain, RK4 game-piece ballistics, and AdvantageScope 3D visualization, before your robot ever hits carpet.</p>
 
 <figure><img src=".gitbook/assets/yacs-pipeline-architecture.png" alt="YACSim CAD-to-Physics Simulation Pipeline"><figcaption><p>From Onshape/URDF CAD to 3D AdvantageScope playback and automated JUnit 5 trajectory validation.</p></figcaption></figure>
 

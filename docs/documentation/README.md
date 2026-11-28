@@ -4,7 +4,7 @@ icon: hand-wave
 
 # Welcome to YACS
 
-**YACS** (*Yet Another CAD Simulator*) bridges the gap between your CAD assembly and your WPILib 2027 robot code. Instead of hand-typing guesses for robot mass, CG height, or camera mounts — and hoping your autos don't tip on competition carpet — YACS loads your real geometry and runs physics checks in seconds.
+**YACS** (*Yet Another CAD Simulator*) bridges the gap between your CAD assembly and your WPILib 2027 robot code. Instead of hand-typing guesses for robot mass, CG height, or camera mounts, and hoping your autos don't tip on competition carpet, YACS loads your real geometry and runs physics checks in seconds.
 
 ## Pick where to start
 
